@@ -1,3 +1,5 @@
+server_files/
+
 # Cache objects
 packer_cache/
 
