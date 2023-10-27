@@ -1,6 +1,6 @@
 # Spellbreak: Bootstrap Community Server
 
-Provisions a AMI that can be spun up to run a cloud-hosted Spellbreak Community Server.
+Provisions an AMI that can be spun up to run a cloud-hosted Spellbreak Community Server.
 
 Created utilizing [Hashicorp Packer](https://www.packer.io/), with this tutorial as a base:
 https://developer.hashicorp.com/packer/tutorials/cloud-production/aws-windows-image
