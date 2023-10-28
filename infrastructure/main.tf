@@ -39,4 +39,14 @@ resource "aws_instance" "spellbreak-us-east-1" {
   credit_specification {
     cpu_credits = "unlimited"
   }
+
+  instance_market_options {
+    market_type = "spot"
+
+    spot_options {
+      max_price = 0.18
+      spot_instance_type = "persistent"
+      instance_interruption_behavior = "stop"
+    }
+  }
 }
