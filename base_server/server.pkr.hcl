@@ -41,16 +41,6 @@ build {
   name    = "spellbreak"
   sources = ["source.amazon-ebs.community-server-base"]
 
-  provisioner "file" {
-    source = "${path.root}/run/startup.cmd"
-    destination = "%AppData%\\Microsoft\\Windows\\Start Menu\\Programs\\Startup\\startup.cmd"
-  }
-  
-  provisioner "file" {
-    source = "${path.root}/run/startup.ps1"
-    destination = "C:\\spellbreak-base-files\\startup.ps1"
-  }
-
   provisioner "powershell" {
     environment_vars = []
     script           = "${path.root}/build/provision_server.ps1"

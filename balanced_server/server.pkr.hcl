@@ -41,7 +41,22 @@ build {
   sources = ["source.amazon-ebs.community-server-base"]
   
   provisioner "file" {
-    source = "${path.root}/Elefrac balance patch 3-2-3-1694989427.zip"
+    source = "${path.root}/supervision_script/GameServer_v1.1.py"
+    destination = "C:\\spellbreak-supervision\\GameServer.py"
+  }
+  
+  provisioner "file" {
+    source = "${path.root}/supervision_script/config.ini"
+    destination = "C:\\spellbreak-supervision\\config.ini"
+  }
+  
+  provisioner "file" {
+    source = "${path.root}/startup/startup.ps1"
+    destination = "C:\\spellbreak-supervision\\startup.ps1"
+  }
+  
+  provisioner "file" {
+    source = "${path.root}/build/Elefrac balance patch 3-2-3-1694989427.zip"
     destination = "C:\\spellbreak-base-files\\balance-patch.zip"
   }
 
