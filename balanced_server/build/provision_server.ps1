@@ -2,7 +2,7 @@
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
 # Add startup script
-Register-ScheduledTask -TaskName "SpellbreakSupervisor" -Trigger (New-ScheduledTaskTrigger -AtStartup) -Action (New-ScheduledTaskAction -Execute "C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe" -Argument "-Command `"& 'C:\spellbreak-supervision\startup.ps1'`"") -RunLevel Highest -Force
+Register-ScheduledTask -TaskName "SpellbreakSupervisor" -Trigger (New-ScheduledTaskTrigger -AtStartup) -Action (New-ScheduledTaskAction -Execute "C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe" -Argument "C:\spellbreak-supervision\startup.ps1") -RunLevel Highest -Force
 
 # Unzip Mod into g3\Content\Paks folder
 Write-Host "Unzipping mod to g3\\Content\\Paks..."
