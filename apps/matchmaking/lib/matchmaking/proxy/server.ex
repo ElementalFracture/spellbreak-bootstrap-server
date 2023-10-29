@@ -30,8 +30,8 @@ defmodule Matchmaking.Proxy.Server do
   def handle_cast({:send_downstream, {client_ip, client_port}, data}, state) do
     :ok = :gen_udp.send(state.socket, client_ip, client_port, data)
 
-    data
-    |> IO.inspect(label: "sent_downstream")
+    # data
+    # |> IO.inspect(label: "sent_downstream", limit: :infinity)
 
     {:noreply, state}
   end
