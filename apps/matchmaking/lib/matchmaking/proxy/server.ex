@@ -30,6 +30,8 @@ defmodule Matchmaking.Proxy.Server do
   def handle_cast({:send_downstream, {client_ip, client_port}, data}, state) do
     :ok = :gen_udp.send(state.socket, client_ip, client_port, data)
 
+    {_, state} = process_data(data, state)
+
     # data
     # |> IO.inspect(label: "sent_downstream", limit: :infinity)
 
@@ -63,5 +65,13 @@ defmodule Matchmaking.Proxy.Server do
     Client.send_upstream(client_pid, data)
 
     {:noreply, state}
+  end
+
+  defp process_data(<<
+      _remaining::binary
+    >> = data, state) do
+    # Logger.info("server: #{inspect(remaining, limit: :infinity)}")
+
+    {data, state}
   end
 end
