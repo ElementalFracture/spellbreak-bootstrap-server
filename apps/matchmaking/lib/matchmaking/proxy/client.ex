@@ -86,10 +86,11 @@ defmodule Matchmaking.Proxy.Client do
     {data, state}
   end
 
-  defp process_data(<<
-      _header::binary-size(10),
-      _remaining::binary
-    >> = data, state) do
+  defp process_data(data, state) do
+    Logger.info("Unknown Packet: #{reveal_strings(data)}")
+    Logger.info("Unknown Client: #{inspect(data, limit: :infinity)}")
+    # Logger.info("Unknown Packet: #{as_base_2(data)}")
+
     {data, state}
   end
 
@@ -113,31 +114,4 @@ defmodule Matchmaking.Proxy.Client do
     |> Enum.map(fn x -> trunc(x/2) end)
     |> List.to_string()
   end
-
-  def string_to_2x_binary(binary) do
-    binary
-    |> :binary.bin_to_list()
-    |> Enum.map(fn x -> trunc(x*2) end)
-    |> :binary.list_to_bin()
-  end
-
-  # defp parse_packet_idx(<<
-  #   packet_idx_1::2-unsigned,
-  #   packet_idx_2::6-unsigned,
-  #   packet_idx_3::8-unsigned,
-  #   packet_idx_4::4-unsigned,
-  #   packet_idx_5::4-unsigned,
-  #   packet_idx_6::8-unsigned-little,
-  #   packet_state_1::8-unsigned-little,
-  #   packet_state_2::8-unsigned-little,
-  #   packet_state_3::8-unsigned-little,
-  #   packet_state_4::10-unsigned-little,
-  #   something::6-unsigned-little
-  # >>) do
-  #   {
-  #     {packet_idx_1, packet_idx_2, packet_idx_3, packet_idx_4, packet_idx_5, packet_idx_6},
-  #     {packet_state_1, packet_state_2, packet_state_3, packet_state_4},
-  #     something
-  #   }
-  # end
 end

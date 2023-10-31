@@ -67,11 +67,23 @@ defmodule Matchmaking.Proxy.Server do
     {:noreply, state}
   end
 
-  defp process_data(<<
-      _remaining::binary
-    >> = data, state) do
-    # Logger.info("server: #{inspect(remaining, limit: :infinity)}")
+  defp process_data(data, state) do
+    # Logger.info("server: #{reveal_strings(data)}")
+    # Logger.info("server: #{inspect(data, limit: :infinity)}")
 
     {data, state}
+  end
+
+  def as_base_2(binary) do
+    for(<<x::size(1) <- binary>>, do: "#{x}")
+    |> Enum.chunk_every(8)
+    |> Enum.join(" ")
+  end
+
+  def reveal_strings(binary) do
+    binary
+    |> :binary.bin_to_list()
+    |> Enum.map(fn x -> trunc(x/2) end)
+    |> List.to_string()
   end
 end
