@@ -11,17 +11,6 @@ defmodule Matchmaking.Proxy.Client do
   @upstream_port 7777
   @upstream_cutoff -1 # Used during development of proxy to get a slice of packets
 
-  @base_player_blob_bytes 206
-  @player_blob_special_bytes_start 129
-  @gauntlet_bytes %{
-    6 => :pyro,
-    0 => :stone,
-    8 => :conduit,
-    10 => :toxic,
-    134 => :frostborn,
-    200 => :tempest
-  }
-
   def start_link({port, downstream}) do
     GenServer.start_link(__MODULE__, {port, downstream})
   end
@@ -113,63 +102,30 @@ defmodule Matchmaking.Proxy.Client do
   {data, state}
   end
 
-  # defp process_data(<<
-  #     packet_idx_1::16-unsigned-big,
-  #     packet_idx_2::16-unsigned-big,
-  #     packet_idx_3::32-unsigned-big,
-  #     remaining::binary
-  #   >> = data, state) do
-  #   Logger.info("client (#{packet_idx_1}, #{packet_idx_2}, #{packet_idx_3}): #{inspect({something, some_counter, remaining}, limit: :infinity)}")
 
-  #   {data, state}
-  # end
+  defp process_data(<<
+    _header::binary-size(27),
+    94, 142, 194, 218, 202, 94, 154, 194, 224, 230, 94,
+    contents::binary
+  >> = data, state) do
+    [data_str | _] = :binary.split(contents, <<0>>)
+    [_map_name | param_strs] = String.split(reveal_strings(data_str), "?")
 
-  # defp process_data(<<
-  #   _header::binary-size(10),
-  #   0::8,
-  #   something::binary-size(2),
-  #   remaining::binary
-  # >> = data, state) do
-  # Logger.info("possible-client: #{inspect(remaining, limit: :infinity)}")
-  # Logger.info("#{as_base_2(remaining)}")
+    params = param_strs
+    |> Enum.map(fn str -> String.split(str, "=", parts: 2) end)
+    |> Map.new(fn [name, value] -> {name, value} end)
+    |> update_in(["Perks"], fn val -> String.split(val, ",") |> Enum.reject(fn perk -> perk == "" end) end)
+    |> update_in(["Stream"], fn val -> val == "1" end)
 
-  # {data, state}
-  # end
+    Logger.info("Player (#{client_ip_str(state)}) #{inspect(params)})")
+
+    {data, state}
+  end
 
   defp process_data(<<
       _header::binary-size(10),
-      remaining::binary
+      _remaining::binary
     >> = data, state) do
-
-    is_player_blob = if byte_size(remaining) > 13 do
-      <<_::binary-size(13), num_bytes_of_something::8-unsigned, _::binary>> = remaining
-      num_bytes_of_something = (num_bytes_of_something / 2)
-
-      trunc(num_bytes_of_something + @base_player_blob_bytes) == byte_size(remaining)
-    else
-      false
-    end
-
-
-    if is_player_blob || data =~ <<194, 194, 194>> do
-      Logger.info("client: #{inspect(remaining, limit: :infinity)}")
-      Logger.info("#{as_base_2(remaining)}")
-
-      <<_::binary-size(13), num_bytes_of_something::8-unsigned, _::binary>> = remaining
-      num_bytes_of_something = (num_bytes_of_something / 2)
-      # <<_::binary-size(@player_blob_special_bytes_start-1), special_bytes::binary-size(num_bytes_of_something), _::binary>> = remaining
-
-      <<header::binary-size(48), contents::binary>> = remaining
-      name = contents
-      |> :binary.split(<<0b01111110>>)
-      |> List.first()
-      |> :binary.bin_to_list()
-      |> Enum.map(fn x -> trunc(x / 2) end)
-      |> :binary.list_to_bin()
-
-      Logger.info("Special bytes: #{num_bytes_of_something}, #{name}")
-    end
-
     {data, state}
   end
 
@@ -185,6 +141,20 @@ defmodule Matchmaking.Proxy.Client do
     for(<<x::size(1) <- binary>>, do: "#{x}")
     |> Enum.chunk_every(8)
     |> Enum.join(" ")
+  end
+
+  def reveal_strings(binary) do
+    binary
+    |> :binary.bin_to_list()
+    |> Enum.map(fn x -> trunc(x/2) end)
+    |> List.to_string()
+  end
+
+  def string_to_2x_binary(binary) do
+    binary
+    |> :binary.bin_to_list()
+    |> Enum.map(fn x -> trunc(x*2) end)
+    |> :binary.list_to_bin()
   end
 
   # defp parse_packet_idx(<<
