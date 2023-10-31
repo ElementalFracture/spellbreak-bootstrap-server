@@ -58,42 +58,6 @@ defmodule Matchmaking.Proxy.Client do
     end
   end
 
-  # defp process_data(<<
-  #   _packet_idx::binary-size(2),
-  #   _something_1::binary-size(3),
-  #   _pretty_static_1::binary-size(6),
-  #   _something_2::binary-size(5),
-  #   _pretty_static_2::binary-size(7),
-  #   maybe_player_blob_size::size(8),
-  #   _pretty_static_3::binary-size(34),
-  #   remaining::binary>> = data, state) do
-
-  #   {_, client_ip, _} = state.downstream
-
-  #   player_name_length = trunc((maybe_player_blob_size - 150) / 2)
-
-  #   if player_name_length > 0 && byte_size(remaining) > player_name_length do
-  #     <<player_name_bytes::binary-size(player_name_length), _::binary>> = remaining
-
-  #     player_name = player_name_bytes
-  #     |> :binary.bin_to_list()
-  #     |> Enum.map(&(trunc(&1 / 2)))
-  #     |> List.to_string()
-
-  #     client_ip_str = client_ip
-  #     |> Tuple.to_list()
-  #     |> Enum.join(".")
-
-  #     if String.match?(player_name, ~r/^[a-zA-Z0-9\_\-]+$/) do
-  #       Logger.info("#{player_name} joined the server (#{client_ip_str})")
-
-  #       Logger.info("join-packet: #{inspect(data, limit: :infinity)}")
-  #     end
-  #   end
-
-  #   {data, state}
-  # end
-
   defp process_data(<<
     1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 8
   >> = data, state) do
