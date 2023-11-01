@@ -65,7 +65,7 @@ defmodule Matchmaking.Proxy.Server do
         available_outbound = state.available_outbound |> Enum.reject(&(&1 == client_port))
 
         {:ok, pid} = DynamicSupervisor.start_child(Clients, {Client, {client_port, {self(), host, port}}})
-        Logger.info("New client (#{Utility.host_to_ip(host)}) -> outbound port (#{client_port})")
+        Logger.info("New client connected from #{Utility.host_to_ip(host)} - Assigned to outbound port #{client_port}")
 
         client = {client_port, pid, DateTime.utc_now()}
         clients = Map.put(state.clients, client_id, client)
@@ -93,10 +93,12 @@ defmodule Matchmaking.Proxy.Server do
   @impl true
   def handle_info(:cleanup, state) do
     newly_available_ports = Enum.reduce(state.clients, fn client, acc ->
-      {client_port, _, last_seen} = client
+      {client_port, client_host, last_seen} = client
 
       if @recycle_ports_after_minutes <= DateTime.diff(last_seen, DateTime.utc_now(), :minute) do
         # Haven't seen a packet from this client in a while, add it to the recycle list
+        Logger.info("Recycling outgoing port #{client_port} because #{Utility.host_to_ip(client_host)} hasn't used it in #{@recycle_ports_after_minutes} minutes...")
+
         [client_port | acc]
       else
         # We've received packets from this client recently. Leave it alone
