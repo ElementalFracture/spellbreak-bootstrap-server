@@ -93,7 +93,7 @@ defmodule Matchmaking.Proxy.Server do
   @impl true
   def handle_info(:cleanup, state) do
     newly_available_ports = Enum.reduce(state.clients, [], fn client, acc ->
-      {client_port, client_host, last_seen} = client
+      {_, {client_port, client_host, last_seen}} = client
 
       if @recycle_ports_after_minutes <= DateTime.diff(last_seen, DateTime.utc_now(), :minute) do
         # Haven't seen a packet from this client in a while, add it to the recycle list
