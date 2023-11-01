@@ -13,7 +13,7 @@ defmodule Matchmaking.Proxy.Server do
   @end_outbound_port 10_000
 
   # After X minutes of client inactivity, recycle an outgoing port to be used by another client
-  @recycle_ports_after_minutes 1
+  @recycle_ports_after_minutes 30
 
   def start_link(port: port) do
     GenServer.start_link(__MODULE__, port)
@@ -115,6 +115,6 @@ defmodule Matchmaking.Proxy.Server do
   defp process_data(data, state), do: {data, state}
 
   defp schedule_cleanup do
-    Process.send_after(self(), :cleanup, 30 * 60 * 1000)
+    Process.send_after(self(), :cleanup, @recycle_ports_after_minutes * 60 * 1000)
   end
 end
