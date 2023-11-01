@@ -8,14 +8,10 @@ defmodule Matchmaking.Proxy.Client do
   """
 
   # IP address of the server (ex: {127, 0, 0, 1})
-  @upstream_ip Application.compile_env(:matchmaking_proxy, :upstream_ip, "192.168.86.111")
-  |> String.split(".")
-  |> Enum.map(&String.to_integer/1)
-  |> List.to_tuple()
+  @upstream_ip Application.compile_env(:matchmaking, :upstream_ip)
 
   # Port of the server (ex: 7777)
-  @upstream_port Application.compile_env(:matchmaking_proxy, :upstream_port, "7777")
-  |> String.to_integer()
+  @upstream_port Application.compile_env(:matchmaking, :upstream_port)
 
   def start_link({port, downstream}) do
     GenServer.start_link(__MODULE__, {port, downstream})

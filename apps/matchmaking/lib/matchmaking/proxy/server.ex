@@ -9,11 +9,11 @@ defmodule Matchmaking.Proxy.Server do
 
   # Outgoing UDP ports are attached to incoming Client IP/Port combos
   # These settings will reserve say, port 8000 to port 10000 for outgoing connections
-  @start_outbound_port 8000
-  @end_outbound_port 10_000
+  @outbound_port_start Application.compile_env(:matchmaking, :outbound_port_start)
+  @outbound_port_end Application.compile_env(:matchmaking, :outbound_port_end)
 
   # After X minutes of client inactivity, recycle an outgoing port to be used by another client
-  @recycle_ports_after_minutes 30
+  @recycle_ports_after_minutes Application.compile_env(:matchmaking, :recycle_ports_minutes)
 
   def start_link(port: port) do
     GenServer.start_link(__MODULE__, port)
@@ -28,7 +28,7 @@ defmodule Matchmaking.Proxy.Server do
     {:ok, %{
       socket: socket,
       clients: %{},
-      available_outbound: Enum.to_list(@start_outbound_port..@end_outbound_port)
+      available_outbound: Enum.to_list(@outbound_port_start..@outbound_port_end)
     }}
   end
 
@@ -92,7 +92,7 @@ defmodule Matchmaking.Proxy.Server do
   # Recycles outbound ports when the client seems to have disappeared
   @impl true
   def handle_info(:cleanup, state) do
-    newly_available_ports = Enum.reduce(state.clients, fn client, acc ->
+    newly_available_ports = Enum.reduce(state.clients, [], fn client, acc ->
       {client_port, client_host, last_seen} = client
 
       if @recycle_ports_after_minutes <= DateTime.diff(last_seen, DateTime.utc_now(), :minute) do
@@ -104,7 +104,7 @@ defmodule Matchmaking.Proxy.Server do
         # We've received packets from this client recently. Leave it alone
         acc
       end
-    end, [])
+    end)
 
     schedule_cleanup()
 
