@@ -108,7 +108,12 @@ defmodule Matchmaking.Proxy.Server do
 
     schedule_cleanup()
 
-    remaining_clients = Enum.reject(state.clients, &(Enum.member?(newly_available_ports, &1.port)))
+    remaining_clients = Enum.reject(state.clients, fn client ->
+      {_, {client_port, _, _}} = client
+
+      Enum.member?(newly_available_ports, client_port)
+    end)
+
     {:noreply, %{state | clients: remaining_clients, available_outbound: state.available_outbound ++ newly_available_ports}}
   end
 

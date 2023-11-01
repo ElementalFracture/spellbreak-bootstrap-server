@@ -14,4 +14,4 @@ config :matchmaking, :inbound_port, System.get_env("INBOUND_PORT", "7777") |> St
 config :matchmaking, :outbound_port_start, System.get_env("OUTBOUND_PORT_START", "8000") |> String.to_integer()
 config :matchmaking, :outbound_port_end, System.get_env("OUTBOUND_PORT_END", "10000") |> String.to_integer()
 
-config :matchmaking, :recycle_ports_minutes, System.get_env("RECYCLE_PORTS_MINUTES", "30") |> String.to_integer()
+config :matchmaking, :recycle_ports_minutes, System.get_env("RECYCLE_PORT_MINUTES", "30") |> String.to_integer()
