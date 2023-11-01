@@ -92,10 +92,11 @@ defmodule Matchmaking.Proxy.Server do
   # Recycles outbound ports when the client seems to have disappeared
   @impl true
   def handle_info(:cleanup, state) do
-    newly_available_ports = Enum.reduce(state.clients, [], fn client, acc ->
-      {_, {client_port, client_host, last_seen}} = client
+    newly_available_ports = Enum.reduce(state.clients, [], fn {client_id, client}, acc ->
+      {client_host, _} = client_id
+      {client_port, _, last_seen} = client
 
-      if @recycle_ports_after_minutes <= DateTime.diff(last_seen, DateTime.utc_now(), :minute) do
+      if @recycle_ports_after_minutes <= DateTime.diff(DateTime.utc_now(), last_seen, :minute) do
         # Haven't seen a packet from this client in a while, add it to the recycle list
         Logger.info("Recycling outgoing port #{client_port} because #{Utility.host_to_ip(client_host)} hasn't used it in #{@recycle_ports_after_minutes} minutes...")
 
