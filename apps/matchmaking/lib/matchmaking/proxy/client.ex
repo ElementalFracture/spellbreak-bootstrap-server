@@ -1,5 +1,5 @@
 defmodule Matchmaking.Proxy.Client do
-  alias Matchmaking.Proxy.Server
+  alias Matchmaking.Proxy.{Server, Utility}
   use GenServer
   require Logger
 
@@ -7,9 +7,15 @@ defmodule Matchmaking.Proxy.Client do
   Routes requests/responses for a specific client through a designated port
   """
 
-  @upstream_ip {192, 168, 86, 111}
-  @upstream_port 7777
-  @upstream_cutoff -1 # Used during development of proxy to get a slice of packets
+  # IP address of the server (ex: {127, 0, 0, 1})
+  @upstream_ip Application.compile_env(:matchmaking_proxy, :upstream_ip, "192.168.86.111")
+  |> String.split(".")
+  |> Enum.map(&String.to_integer/1)
+  |> List.to_tuple()
+
+  # Port of the server (ex: 7777)
+  @upstream_port Application.compile_env(:matchmaking_proxy, :upstream_port, "7777")
+  |> String.to_integer()
 
   def start_link({port, downstream}) do
     GenServer.start_link(__MODULE__, {port, downstream})
@@ -25,10 +31,14 @@ defmodule Matchmaking.Proxy.Client do
     }}
   end
 
+  @doc """
+  Queues a packet from the client to be sent to the server
+  """
   def send_upstream(pid, data) do
     GenServer.cast(pid, {:send_upstream, data})
   end
 
+  # Handles sending a packet from a client to the server
   @impl true
   def handle_cast({:send_upstream, data}, state) do
     :ok = :gen_udp.send(state.socket, @upstream_ip, @upstream_port, data)
@@ -38,15 +48,14 @@ defmodule Matchmaking.Proxy.Client do
     {:noreply, state}
   end
 
+  # Received a UDP packet from an outgoing UDP port (theoretically, the upstream server)
   @impl true
   def handle_info({:udp, _socket, host, port, data}, state) do
     is_upstream = host == @upstream_ip && port == @upstream_port
 
     cond do
-      is_upstream && state.seen_upstream_responses > @upstream_cutoff && @upstream_cutoff > 0 ->
-        {:stop, :upstream_cutoff_reached}
-
-        is_upstream ->
+      is_upstream ->
+        # This is a packet from the server we expect to see. Trust it
         seen_upstream_responses = state.seen_upstream_responses + 1
 
         {downstream_pid, client_ip, client_port} = state.downstream
@@ -54,26 +63,30 @@ defmodule Matchmaking.Proxy.Client do
 
         {:noreply, %{ state | seen_upstream_responses: seen_upstream_responses}}
 
-      true -> {:noreply, state}
+      true ->
+        # We don't know who this is a packet from. Ignore it
+        {:noreply, state}
     end
   end
 
+  # Processes a packet from a client, headed to the server
   defp process_data(<<
     1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 8
   >> = data, state) do
     Logger.info("Hello Message (#{client_ip_str(state)})")
-
-  {data, state}
+    {data, state}
   end
-
 
   defp process_data(<<
     _header::binary-size(27),
+    # "/Game/Maps/" encoded in ASCII * 2
     94, 142, 194, 218, 202, 94, 154, 194, 224, 230, 94,
     contents::binary
   >> = data, state) do
     [data_str | _] = :binary.split(contents, <<0>>)
-    [_map_name | param_strs] = String.split(reveal_strings(data_str), "?")
+    [_map_name | param_strs] = data_str
+    |> Utility.reveal_strings()
+    |> String.split("?")
 
     params = param_strs
     |> Enum.map(fn str -> String.split(str, "=", parts: 2) end)
@@ -86,32 +99,10 @@ defmodule Matchmaking.Proxy.Client do
     {data, state}
   end
 
-  defp process_data(data, state) do
-    Logger.info("Unknown Packet: #{reveal_strings(data)}")
-    Logger.info("Unknown Client: #{inspect(data, limit: :infinity)}")
-    # Logger.info("Unknown Packet: #{as_base_2(data)}")
-
-    {data, state}
-  end
+  defp process_data(data, state), do: {data, state}
 
   defp client_ip_str(state) do
       {_, client_ip, _} = state.downstream
-
-      client_ip
-      |> Tuple.to_list()
-      |> Enum.join(".")
-  end
-
-  def as_base_2(binary) do
-    for(<<x::size(1) <- binary>>, do: "#{x}")
-    |> Enum.chunk_every(8)
-    |> Enum.join(" ")
-  end
-
-  def reveal_strings(binary) do
-    binary
-    |> :binary.bin_to_list()
-    |> Enum.map(fn x -> trunc(x/2) end)
-    |> List.to_string()
+      Utility.host_to_ip(client_ip)
   end
 end

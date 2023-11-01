@@ -1,11 +1,19 @@
 defmodule Matchmaking.Proxy.Server do
-  alias Matchmaking.Proxy.{Client, Clients}
+  alias Matchmaking.Proxy.{Client, Clients, Utility}
   use GenServer
   require Logger
 
   @moduledoc """
   Handles incoming UDP communication with clients
   """
+
+  # Outgoing UDP ports are attached to incoming Client IP/Port combos
+  # These settings will reserve say, port 8000 to port 10000 for outgoing connections
+  @start_outbound_port 8000
+  @end_outbound_port 10_000
+
+  # After X minutes of client inactivity, recycle an outgoing port to be used by another client
+  @recycle_ports_after_minutes 1
 
   def start_link(port: port) do
     GenServer.start_link(__MODULE__, port)
@@ -15,41 +23,51 @@ defmodule Matchmaking.Proxy.Server do
   def init(port) do
     {:ok, socket} = :gen_udp.open(port, [:binary, active: true])
 
+    schedule_cleanup()
+
     {:ok, %{
       socket: socket,
       clients: %{},
-      available_outbound: Enum.to_list(8000..9000)
+      available_outbound: Enum.to_list(@start_outbound_port..@end_outbound_port)
     }}
   end
 
+  @doc """
+  Queues the sending packets from the server to the client
+  """
   def send_downstream(pid, {client_ip, client_port}, data) do
     GenServer.cast(pid, {:send_downstream, {client_ip, client_port}, data})
   end
 
+  # Handles sending packets from the server to the client
   @impl true
   def handle_cast({:send_downstream, {client_ip, client_port}, data}, state) do
     :ok = :gen_udp.send(state.socket, client_ip, client_port, data)
 
     {_, state} = process_data(data, state)
-
-    # data
-    # |> IO.inspect(label: "sent_downstream", limit: :infinity)
-
     {:noreply, state}
   end
 
+  # Received a UDP packet from the client, to forward to the server
   @impl true
   def handle_info({:udp, _socket, host, port, data}, state) do
     client_id = {host, port}
-    {client, state} = case Map.get(state.clients, client_id) do
-      nil ->
+    {client, state} = case {Map.get(state.clients, client_id), state} do
+      {nil, %{available_outbounds: []}} ->
+        # We have no available outbound ports
+        Logger.warning("New client (#{Utility.host_to_ip(host)}) tried to connect when there are no outbound ports available. Ignoring")
+
+        {:noreply, state}
+
+      {nil, _} ->
+        # We have a new client and also available outbound ports
         client_port = Enum.random(state.available_outbound)
         available_outbound = state.available_outbound |> Enum.reject(&(&1 == client_port))
 
         {:ok, pid} = DynamicSupervisor.start_child(Clients, {Client, {client_port, {self(), host, port}}})
-        client_port |> IO.inspect(label: "new_client")
+        Logger.info("New client (#{Utility.host_to_ip(host)}) -> outbound port (#{client_port})")
 
-        client = {client_port, pid}
+        client = {client_port, pid, DateTime.utc_now()}
         clients = Map.put(state.clients, client_id, client)
 
         {client, %{state |
@@ -57,33 +75,44 @@ defmodule Matchmaking.Proxy.Server do
           clients: clients
         }}
 
-      client ->
-        {client, state}
+      {client, _} ->
+        # We have seen this client before and they have an assigned outbound port
+        {client_port, client_pid, _} = client
+        new_client_state = {client_port, client_pid, DateTime.utc_now()}
+
+        {client, put_in(state, [:clients, client_id], new_client_state)}
     end
 
-    {_, client_pid} = client
+    {_, client_pid, _} = client
     Client.send_upstream(client_pid, data)
 
     {:noreply, state}
   end
 
-  defp process_data(data, state) do
-    # Logger.info("server: #{reveal_strings(data)}")
-    # Logger.info("server: #{inspect(data, limit: :infinity)}")
+  # Recycles outbound ports when the client seems to have disappeared
+  @impl true
+  def handle_info(:cleanup, state) do
+    newly_available_ports = Enum.reduce(state.clients, fn client, acc ->
+      {client_port, _, last_seen} = client
 
-    {data, state}
+      if @recycle_ports_after_minutes <= DateTime.diff(last_seen, DateTime.utc_now(), :minute) do
+        # Haven't seen a packet from this client in a while, add it to the recycle list
+        [client_port | acc]
+      else
+        # We've received packets from this client recently. Leave it alone
+        acc
+      end
+    end, [])
+
+    schedule_cleanup()
+
+    remaining_clients = Enum.reject(state.clients, &(Enum.member?(newly_available_ports, &1.port)))
+    {:noreply, %{state | clients: remaining_clients, available_outbound: state.available_outbound ++ newly_available_ports}}
   end
 
-  def as_base_2(binary) do
-    for(<<x::size(1) <- binary>>, do: "#{x}")
-    |> Enum.chunk_every(8)
-    |> Enum.join(" ")
-  end
+  defp process_data(data, state), do: {data, state}
 
-  def reveal_strings(binary) do
-    binary
-    |> :binary.bin_to_list()
-    |> Enum.map(fn x -> trunc(x/2) end)
-    |> List.to_string()
+  defp schedule_cleanup do
+    Process.send_after(self(), :cleanup, 30 * 60 * 1000)
   end
 end
