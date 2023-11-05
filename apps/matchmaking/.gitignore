@@ -24,3 +24,5 @@ matchmaking-*.tar
 
 # Temporary files, for example, from tests.
 /tmp/
+
+*.secret.exs

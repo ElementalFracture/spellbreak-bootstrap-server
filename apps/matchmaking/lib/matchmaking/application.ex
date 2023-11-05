@@ -3,6 +3,7 @@ defmodule Matchmaking.Application do
   # for more information on OTP Applications
   @moduledoc false
   use Application
+  alias Matchmaking.DiscordBot
   alias Matchmaking.Proxy
 
   # Accept client connections on this port
@@ -14,6 +15,12 @@ defmodule Matchmaking.Application do
       {DynamicSupervisor, strategy: :one_for_one, name: Matchmaking.Proxy.Clients},
       {Proxy.Server, [port: @inbound_port]},
     ]
+
+    children = if System.get_env("DISCORD_BOT") == "1" do
+      children ++ [{DiscordBot.GatewayClient, :ok}]
+    else
+      children
+    end
 
     # See https://hexdocs.pm/elixir/Supervisor.html
     # for other strategies and supported options
