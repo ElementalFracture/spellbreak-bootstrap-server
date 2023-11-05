@@ -1,19 +1,11 @@
 defmodule Matchmaking.Proxy.Server do
-  alias Matchmaking.Proxy.{Client, Clients, Utility}
+  alias Matchmaking.Proxy.{Connection, Connections, Utility}
   use GenServer
   require Logger
 
   @moduledoc """
   Handles incoming UDP communication with clients
   """
-
-  # Outgoing UDP ports are attached to incoming Client IP/Port combos
-  # These settings will reserve say, port 8000 to port 10000 for outgoing connections
-  @outbound_port_start Application.compile_env(:matchmaking, :outbound_port_start)
-  @outbound_port_end Application.compile_env(:matchmaking, :outbound_port_end)
-
-  # After X minutes of client inactivity, recycle an outgoing port to be used by another client
-  @recycle_ports_after_minutes Application.compile_env(:matchmaking, :recycle_ports_minutes)
 
   def start_link(port: port) do
     GenServer.start_link(__MODULE__, port)
@@ -23,29 +15,16 @@ defmodule Matchmaking.Proxy.Server do
   def init(port) do
     {:ok, socket} = :gen_udp.open(port, [:binary, active: true])
 
+    outbound_port_start = Application.fetch_env!(:matchmaking, :outbound_port_start)
+    outbound_port_end = Application.fetch_env!(:matchmaking, :outbound_port_end)
+
     schedule_cleanup()
 
     {:ok, %{
       socket: socket,
       clients: %{},
-      available_outbound: Enum.to_list(@outbound_port_start..@outbound_port_end)
+      available_outbound: Enum.to_list(outbound_port_start..outbound_port_end)
     }}
-  end
-
-  @doc """
-  Queues the sending packets from the server to the client
-  """
-  def send_downstream(pid, {client_ip, client_port}, data) do
-    GenServer.cast(pid, {:send_downstream, {client_ip, client_port}, data})
-  end
-
-  # Handles sending packets from the server to the client
-  @impl true
-  def handle_cast({:send_downstream, {client_ip, client_port}, data}, state) do
-    :ok = :gen_udp.send(state.socket, client_ip, client_port, data)
-
-    {_, state} = process_data(data, state)
-    {:noreply, state}
   end
 
   # Received a UDP packet from the client, to forward to the server
@@ -61,13 +40,35 @@ defmodule Matchmaking.Proxy.Server do
 
       {nil, _} ->
         # We have a new client and also available outbound ports
-        client_port = Enum.random(state.available_outbound)
-        available_outbound = state.available_outbound |> Enum.reject(&(&1 == client_port))
+        [external_upstream_port, external_downstream_port] = Enum.take_random(state.available_outbound, 2)
+        available_outbound = state.available_outbound |> Enum.reject(&(Enum.member?([external_upstream_port, external_downstream_port], &1)))
 
-        {:ok, pid} = DynamicSupervisor.start_child(Clients, {Client, {client_port, {self(), host, port}}})
-        Logger.info("New client connected from #{Utility.host_to_ip(host)} - Assigned to outbound port #{client_port}")
+        {:ok, downstream_conn} = DynamicSupervisor.start_child(Connections, {Connection, [
+          downstream_socket: state.socket,
+          direction: :to_downstream,
+          external_port: external_downstream_port,
+          dest_host: host,
+          dest_port: port
+        ]})
 
-        client = {client_port, pid, DateTime.utc_now()}
+        {:ok, upstream_conn} = DynamicSupervisor.start_child(Connections, {Connection, [
+          downstream_socket: state.socket,
+          direction: :to_upstream,
+          external_port: external_upstream_port,
+          dest_host: Application.fetch_env!(:matchmaking, :upstream_ip),
+          dest_port: Application.fetch_env!(:matchmaking, :upstream_port)
+        ]})
+
+        Connection.forward(downstream_conn, upstream_conn)
+        Connection.forward(upstream_conn, downstream_conn)
+
+        Logger.info("New client connected from #{Utility.host_to_ip(host)} - Assigned to outbound port #{external_upstream_port}")
+
+        client = {[
+          {external_downstream_port, downstream_conn},
+          {external_upstream_port, upstream_conn}
+        ], DateTime.utc_now()}
+
         clients = Map.put(state.clients, client_id, client)
 
         {client, %{state |
@@ -77,14 +78,13 @@ defmodule Matchmaking.Proxy.Server do
 
       {client, _} ->
         # We have seen this client before and they have an assigned outbound port
-        {client_port, client_pid, _} = client
-        new_client_state = {client_port, client_pid, DateTime.utc_now()}
+        {conns, _} = client
 
-        {client, put_in(state, [:clients, client_id], new_client_state)}
+        {client, put_in(state, [:clients, client_id], {conns, DateTime.utc_now()})}
     end
 
-    {_, client_pid, _} = client
-    Client.send_upstream(client_pid, data)
+    {[_, {_, upstream_conn}], _} = client
+    Connection.send(upstream_conn, {host, port}, data)
 
     {:noreply, state}
   end
@@ -92,15 +92,21 @@ defmodule Matchmaking.Proxy.Server do
   # Recycles outbound ports when the client seems to have disappeared
   @impl true
   def handle_info(:cleanup, state) do
-    newly_available_ports = Enum.reduce(state.clients, [], fn {client_id, client}, acc ->
-      {client_host, _} = client_id
-      {client_port, _, last_seen} = client
+    removed_client_ids = Enum.reduce(state.clients, [], fn {client_id, client}, acc ->
+      {host, _} = client_id
+      {conns, last_seen} = client
 
-      if @recycle_ports_after_minutes <= DateTime.diff(DateTime.utc_now(), last_seen, :minute) do
+      recycle_port_ttl = Application.fetch_env!(:matchmaking, :recycle_ports_minutes)
+
+      if recycle_port_ttl <= DateTime.diff(DateTime.utc_now(), last_seen, :minute) do
         # Haven't seen a packet from this client in a while, add it to the recycle list
-        Logger.info("Recycling outgoing port #{client_port} because #{Utility.host_to_ip(client_host)} hasn't used it in #{@recycle_ports_after_minutes} minutes...")
+        Logger.info("Recycling ports for #{Utility.host_to_ip(host)} since they've been missing for #{recycle_port_ttl} minutes...")
 
-        [client_port | acc]
+        Enum.each(conns, fn {_, conn} ->
+          Connection.close(conn)
+        end)
+
+        [client_id | acc]
       else
         # We've received packets from this client recently. Leave it alone
         acc
@@ -109,18 +115,20 @@ defmodule Matchmaking.Proxy.Server do
 
     schedule_cleanup()
 
-    remaining_clients = Enum.reject(state.clients, fn client ->
-      {_, {client_port, _, _}} = client
+    remaining_clients = Map.drop(state.clients, removed_client_ids)
+    removed_clients = Map.take(state.clients, removed_client_ids)
+    newly_available_ports = Enum.reduce(removed_clients, [], fn {_, client}, acc ->
+      {conns, _} = client
+      new_ports = Enum.map(conns, fn {port, _} -> port end)
 
-      Enum.member?(newly_available_ports, client_port)
+      new_ports ++ acc
     end)
 
     {:noreply, %{state | clients: remaining_clients, available_outbound: state.available_outbound ++ newly_available_ports}}
   end
 
-  defp process_data(data, state), do: {data, state}
-
   defp schedule_cleanup do
-    Process.send_after(self(), :cleanup, @recycle_ports_after_minutes * 60 * 1000)
+    recycle_port_ttl = Application.fetch_env!(:matchmaking, :recycle_ports_minutes)
+    Process.send_after(self(), :cleanup, recycle_port_ttl * 60 * 1000)
   end
 end

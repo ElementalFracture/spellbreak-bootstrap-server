@@ -15,3 +15,5 @@ config :matchmaking, :outbound_port_start, System.get_env("OUTBOUND_PORT_START",
 config :matchmaking, :outbound_port_end, System.get_env("OUTBOUND_PORT_END", "10000") |> String.to_integer()
 
 config :matchmaking, :recycle_ports_minutes, System.get_env("RECYCLE_PORT_MINUTES", "30") |> String.to_integer()
+
+config :matchmaking, :recording_enabled, System.get_env("RECORDING_ENABLED", "false") == "true"

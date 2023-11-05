@@ -5,14 +5,15 @@ defmodule Matchmaking.Application do
   use Application
   alias Matchmaking.Proxy
 
-  # Accept client connections on this port
-  @inbound_port Application.compile_env(:matchmaking, :inbound_port)
-
   @impl true
   def start(_type, _args) do
+    inbound_port = Application.fetch_env!(:matchmaking, :inbound_port)
+
     children = [
-      {DynamicSupervisor, strategy: :one_for_one, name: Matchmaking.Proxy.Clients},
-      {Proxy.Server, [port: @inbound_port]},
+      {DynamicSupervisor, strategy: :one_for_one, name: Matchmaking.Proxy.Connections},
+      {Logging.MatchRecorder, [base_directory: "tmp/recordings"]},
+      {Parsing.MatchParser, []},
+      {Proxy.Server, [port: inbound_port]},
     ]
 
     # See https://hexdocs.pm/elixir/Supervisor.html
