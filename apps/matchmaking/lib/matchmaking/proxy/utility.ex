@@ -16,6 +16,16 @@ defmodule Matchmaking.Proxy.Utility do
   end
 
   @doc """
+  Undoes reveal_strings
+  """
+  def unreveal_strings(binary) do
+    binary
+    |> :binary.bin_to_list()
+    |> Enum.map(fn x -> x*2 end)
+    |> List.to_string()
+  end
+
+  @doc """
   Takes a binary and returns the bits encoded within it
   """
   def as_base_2(binary) do

@@ -1,6 +1,7 @@
 defmodule Mix.Tasks.Replay do
   use Mix.Task
   alias Parsing.MatchParser
+  alias Matchmaking.Proxy.Utility
 
   def run([replay_filename | rest]) do
     {:ok, match_parser} = GenServer.start_link(MatchParser, :ok)
@@ -9,7 +10,7 @@ defmodule Mix.Tasks.Replay do
     |> Stream.map(&String.trim/1)
     |> Stream.with_index
     |> Stream.map(fn ({line, _index}) ->
-      [[_, ts, server, direction, client, data, comment]] = Regex.scan(~r/^(.+?) - (.+?) ([\<\>]) (.+\:[0-9]+?):(.+) ---# (.+?) #---$/, line)
+      [[_, ts, server, direction, client, data, comment]] = Regex.scan(~r/^(.+?) - (.+?) ([\<\>]) ([0-9\.]+:[0-9]+):(.+) ---# (.+?) #---$/, line)
       data = String.replace(data, "--newline--", "\n")
 
       dir = if direction == "<", do: :to_upstream, else: :to_downstream
@@ -18,7 +19,29 @@ defmodule Mix.Tasks.Replay do
       dest = if dir == :to_upstream, do: server, else: client
 
       if Enum.member?(rest, "--translate") do
-        IO.puts("#{ts} - #{server} #{direction} #{client}: #{inspect(data)} ---# #{comment || "???"} #---")
+        convert_text = Enum.member?(rest, "--reveal-strings")
+        comment = if convert_text, do: "#{comment || "???"} - #{Utility.reveal_strings(data)}", else: "#{comment || "???"}"
+
+        data = cond do
+          Enum.member?(rest, "--remove-count-header") && dir == :to_upstream ->
+            <<_::binary-size(8), rest::binary>> = data
+            rest
+
+          Enum.member?(rest, "--remove-count-header") && dir == :to_downstream ->
+            <<_::binary-size(9), rest::binary>> = data
+            rest
+
+          true -> data
+        end
+
+        cond do
+          dir == :to_upstream && Enum.member?(rest, "--only-downstream") -> :noop
+          dir == :to_downstream && Enum.member?(rest, "--only-upstream") -> :noop
+          (comment =~ "Heartbeat" || comment =~ "Handshake") && Enum.member?(rest, "--no-heartbeat") -> :noop
+
+          true ->
+            IO.puts("#{ts} - #{server} #{direction} #{client}: #{Base.encode16(data)} ---# #{comment} #---")
+        end
       else
         MatchParser.parse(match_parser, [source, dest], DateTime.from_iso8601(ts), dir, {parse_ip_port(source), parse_ip_port(dest)}, data)
       end
