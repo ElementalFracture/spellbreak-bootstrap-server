@@ -14,6 +14,7 @@ defmodule Matchmaking.Proxy.Server do
   @impl true
   def init(port) do
     {:ok, socket} = :gen_udp.open(port, [:binary, active: true])
+    {:ok, match_parser} = Parsing.MatchParser.start_link([])
 
     outbound_port_start = Application.fetch_env!(:matchmaking, :outbound_port_start)
     outbound_port_end = Application.fetch_env!(:matchmaking, :outbound_port_end)
@@ -22,6 +23,7 @@ defmodule Matchmaking.Proxy.Server do
 
     {:ok, %{
       socket: socket,
+      match_parser: match_parser,
       clients: %{},
       available_outbound: Enum.to_list(outbound_port_start..outbound_port_end)
     }}
@@ -44,6 +46,7 @@ defmodule Matchmaking.Proxy.Server do
         available_outbound = state.available_outbound |> Enum.reject(&(Enum.member?([external_upstream_port, external_downstream_port], &1)))
 
         {:ok, downstream_conn} = DynamicSupervisor.start_child(Connections, {Connection, [
+          match_parser: state.match_parser,
           downstream_socket: state.socket,
           direction: :to_downstream,
           external_port: external_downstream_port,
@@ -52,6 +55,7 @@ defmodule Matchmaking.Proxy.Server do
         ]})
 
         {:ok, upstream_conn} = DynamicSupervisor.start_child(Connections, {Connection, [
+          match_parser: state.match_parser,
           downstream_socket: state.socket,
           direction: :to_upstream,
           external_port: external_upstream_port,

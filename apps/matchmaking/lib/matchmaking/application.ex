@@ -12,7 +12,6 @@ defmodule Matchmaking.Application do
     children = [
       {DynamicSupervisor, strategy: :one_for_one, name: Matchmaking.Proxy.Connections},
       {Logging.MatchRecorder, [base_directory: "tmp/recordings"]},
-      {Parsing.MatchParser, []},
       {Proxy.Server, [port: inbound_port]},
     ]
 

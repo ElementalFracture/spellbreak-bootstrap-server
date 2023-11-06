@@ -6,7 +6,7 @@ defmodule Parsing.MatchParser do
   require Logger
 
   def start_link(_) do
-    GenServer.start_link(__MODULE__, :ok, name: __MODULE__)
+    GenServer.start_link(__MODULE__, :ok)
   end
 
   @impl true
@@ -20,8 +20,12 @@ defmodule Parsing.MatchParser do
     }}
   end
 
-  def parse(conn, ts, direction, {source, destination}, data) do
-    GenServer.cast(__MODULE__, {:parse, conn, ts, direction, {source, destination}, data})
+  def parse(pid, conn, ts, direction, {source, destination}, data) do
+    GenServer.cast(pid, {:parse, conn, ts, direction, {source, destination}, data})
+  end
+
+  def wait(pid) do
+    GenServer.call(pid, :wait, 6000000)
   end
 
   @impl true
@@ -42,6 +46,11 @@ defmodule Parsing.MatchParser do
     })
 
     {:noreply, state}
+  end
+
+  @impl true
+  def handle_call(:wait, _, state) do
+    {:reply, :ok, state}
   end
 
   # Processes a packet from a client, headed to the server
@@ -91,8 +100,6 @@ defmodule Parsing.MatchParser do
 
     {state, "Player Disconnected: #{player_name}"}
   end
-
-
 
   defp process_packet(_, _, _, _, state), do: {state, false}
 end

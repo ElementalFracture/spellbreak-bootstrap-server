@@ -73,7 +73,7 @@ defmodule Logging.MatchRecorder do
     client = if direction === :to_upstream, do: source, else: destination
 
     IO.binwrite(packet_file, "#{ts} - #{server} #{dir_indicator} #{client}:")
-    IO.binwrite(packet_file, "#{inspect(data)}")
+    IO.binwrite(packet_file, data |> String.replace("\n", "--newline--"))
     IO.binwrite(packet_file, " ---# #{comment || "???"} #---\n")
 
     {:noreply, state}

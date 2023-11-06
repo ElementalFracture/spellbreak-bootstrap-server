@@ -1,8 +1,16 @@
 defmodule MatchmakingTest do
   use ExUnit.Case
-  doctest Matchmaking
+  import ExUnit.CaptureLog
 
-  test "greets the world" do
-    assert Matchmaking.hello() == :world
+  test "detects joined players" do
+    assert capture_log(fn ->
+      Mix.Tasks.Replay.run(["./priv/test_files/connect_disconnect.log"])
+    end) =~ "Player 'polymorfiq' joined from 192.168.86.111"
+  end
+
+  test "detects disconnected players" do
+    assert capture_log(fn ->
+      Mix.Tasks.Replay.run(["./priv/test_files/connect_disconnect.log"])
+    end) =~ "Player 'polymorfiq' disconnected from 192.168.86.111"
   end
 end

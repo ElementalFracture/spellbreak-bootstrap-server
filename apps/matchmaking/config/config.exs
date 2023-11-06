@@ -3,7 +3,7 @@ import Config
 config :logger, :console,
   format: "$time $metadata[$level] $message\n"
 
-config :matchmaking, :upstream_ip, System.fetch_env!("UPSTREAM_IP")
+config :matchmaking, :upstream_ip, System.get_env("UPSTREAM_IP", "127.0.0.1")
 |> String.split(".")
 |> Enum.map(&String.to_integer/1)
 |> List.to_tuple()
