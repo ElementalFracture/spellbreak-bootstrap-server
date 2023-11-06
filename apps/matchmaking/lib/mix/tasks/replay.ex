@@ -9,7 +9,7 @@ defmodule Mix.Tasks.Replay do
     |> Stream.map(&String.trim/1)
     |> Stream.with_index
     |> Stream.map(fn ({line, _index}) ->
-      [[_, ts, server, direction, client, data, _comment]] = Regex.scan(~r/^(.+?) - (.+?) ([\<\>]) (.+\:[0-9]+?):(.+) ---# (.+?) #---$/, line)
+      [[_, ts, server, direction, client, data, comment]] = Regex.scan(~r/^(.+?) - (.+?) ([\<\>]) (.+\:[0-9]+?):(.+) ---# (.+?) #---$/, line)
       data = String.replace(data, "--newline--", "\n")
 
       dir = if direction == "<", do: :to_upstream, else: :to_downstream
@@ -18,7 +18,7 @@ defmodule Mix.Tasks.Replay do
       dest = if dir == :to_upstream, do: server, else: client
 
       if Enum.member?(rest, "--translate") do
-        IO.puts("#{ts} - #{server} #{direction} #{client}: #{inspect(data)}")
+        IO.puts("#{ts} - #{server} #{direction} #{client}: #{inspect(data)} ---# #{comment || "???"} #---")
       else
         MatchParser.parse(match_parser, [source, dest], DateTime.from_iso8601(ts), dir, {parse_ip_port(source), parse_ip_port(dest)}, data)
       end
