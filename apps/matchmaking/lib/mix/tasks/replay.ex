@@ -2,24 +2,26 @@ defmodule Mix.Tasks.Replay do
   use Mix.Task
   alias Parsing.MatchParser
 
-  def run([replay_filename]) do
+  def run([replay_filename | rest]) do
     {:ok, match_parser} = GenServer.start_link(MatchParser, :ok)
 
     File.stream!(replay_filename)
     |> Stream.map(&String.trim/1)
     |> Stream.with_index
     |> Stream.map(fn ({line, _index}) ->
-      [[_, ts, first_ip, direction, second_ip, data, _comment]] = Regex.scan(~r/^(.+?) - (.+?) ([\<\>]) (.+\:[0-9]+?):(.+) ---# (.+?) #---$/, line)
+      [[_, ts, server, direction, client, data, _comment]] = Regex.scan(~r/^(.+?) - (.+?) ([\<\>]) (.+\:[0-9]+?):(.+) ---# (.+?) #---$/, line)
       data = String.replace(data, "--newline--", "\n")
 
       dir = if direction == "<", do: :to_upstream, else: :to_downstream
-      server = if dir == :to_upstream, do: first_ip, else: second_ip
-      client = if dir == :to_upstream, do: second_ip, else: first_ip
 
       source = if dir == :to_upstream, do: client, else: server
       dest = if dir == :to_upstream, do: server, else: client
 
-      MatchParser.parse(match_parser, [source, dest], DateTime.from_iso8601(ts), dir, {parse_ip_port(source), parse_ip_port(dest)}, data)
+      if Enum.member?(rest, "--translate") do
+        IO.puts("#{ts} - #{server} #{direction} #{client}: #{inspect(data)}")
+      else
+        MatchParser.parse(match_parser, [source, dest], DateTime.from_iso8601(ts), dir, {parse_ip_port(source), parse_ip_port(dest)}, data)
+      end
     end)
     |> Stream.run
 

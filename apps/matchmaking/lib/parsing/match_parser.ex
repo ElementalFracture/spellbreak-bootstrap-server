@@ -33,7 +33,7 @@ defmodule Parsing.MatchParser do
     {state, comment} = process_packet(conn, direction, {source, destination}, data, state)
 
     {source_host, source_port} = source
-    {dest_host, dest_port} = source
+    {dest_host, dest_port} = destination
 
     MatchRecorder.record(%{
       state: state.match_state,
