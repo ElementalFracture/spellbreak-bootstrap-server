@@ -73,7 +73,7 @@ defmodule Parsing.MatchParser do
     contents::binary
   >> = data, state) do
     [data_str | _] = :binary.split(contents, <<0>>)
-    [map_name | param_strs] = data_str
+    [_map_name | param_strs] = data_str
     |> Utility.reveal_strings()
     |> String.split("?")
 
@@ -102,6 +102,39 @@ defmodule Parsing.MatchParser do
     Logger.info("Player '#{player_name}' disconnected from #{Utility.host_to_ip(source_host)}")
 
     {state, "Player Disconnected: #{player_name}"}
+  end
+
+  defp process_packet(conn, :to_upstream, _,  <<_::binary-size(31), 0x61, 0x00, 0x87, 0x60, 0xBE, 0x80, 0x74, 0x59, _::binary-size(27), 0x00, 0x00, 0x0C>>, state) do
+    player_info = MatchState.get_player_info(state.match_state, conn)
+    player_name = Map.get(player_info, :username, "Unknown player")
+    Logger.info("'SpawnMatchBot' executed by '#{player_name}'")
+
+    {state, "SpawnMatchBot??"}
+  end
+
+  defp process_packet(conn, :to_upstream, _,  <<
+    _::binary-size(9),
+    0x20, 0x01,
+    _::binary-size(2),
+    rest::binary>>,
+  state) do
+    start_byte = find_start_byte(rest, 0)
+
+    if start_byte != nil do
+      case String.split(String.slice(rest, start_byte..-1), <<0x80, 0x01, 0x1C, 0x82, 0xF9, 0x02, 0xD2, 0x65, 0x81>>) do
+        [chunk_1, _] ->
+          chunk_1 = String.slice(chunk_1, 0..-2)
+          player_info = MatchState.get_player_info(state.match_state, conn)
+          player_name = Map.get(player_info, :username, "Unknown player")
+          Logger.info("'ServerCall '#{parse_server_call_str(chunk_1)}' executed by '#{player_name}'?")
+
+          {state, "ServerCall?? #{Base.encode16(chunk_1)} (#{parse_server_call_str(chunk_1)}')"}
+
+        _ -> {state, "???"}
+      end
+    else
+      {state, "???"}
+    end
   end
 
   defp process_packet(_, :to_upstream, _, <<_header::binary-size(9), 128, 1, 28, 130, 249, 2, 210, 101, 129, _::binary>>, state) do
@@ -140,5 +173,116 @@ defmodule Parsing.MatchParser do
     {state, "Handshake 2??"}
   end
 
-  defp process_packet(_, _, _, _, state), do: {state, false}
+  defp process_packet(_, _, _, _, state), do: {state, "???"}
+
+  defp parse_server_call_str(call_str), do: parse_server_call_str(0, "", call_str)
+  defp parse_server_call_str(_, curr, <<>>), do: curr
+
+  defp parse_server_call_str(pos, curr, <<char_data::binary-size(1), rest::binary>>) do
+    <<char_num::unsigned-8>> = char_data
+
+    char_num = if pos == 0 && char_num !== 0b01111000, do: char_num + 1, else: char_num
+
+    char = case char_num do
+      0b00000011 -> " "
+      0b00000010 -> " "
+      0b11111011 -> "_"
+      0b01111000 -> "/"
+      0b00001010 -> "A"
+      0b00001001 -> "A"
+      0b00001011 -> "A"
+      0b00010010 -> "B"
+      0b00010011 -> "B"
+      0b00011010 -> "C"
+      0b00011011 -> "C"
+      0b00100010 -> "D"
+      0b00100011 -> "D"
+      0b00101010 -> "E"
+      0b00101011 -> "E"
+      0b00110010 -> "F"
+      0b00110011 -> "F"
+      0b00111010 -> "G"
+      0b00111011 -> "G"
+      0b01000010 -> "H"
+      0b01000011 -> "H"
+      0b01001010 -> "I"
+      0b01001011 -> "I"
+      0b01010010 -> "J"
+      0b01010011 -> "J"
+      0b01011010 -> "K"
+      0b01011011 -> "K"
+      0b01100010 -> "L"
+      0b01100011 -> "L"
+      0b01101010 -> "M"
+      0b01101011 -> "M"
+      0b01110010 -> "N"
+      0b01110011 -> "N"
+      0b01111010 -> "O"
+      0b01111011 -> "O"
+      0b10000010 -> "P"
+      0b10000011 -> "P"
+      0b10001010 -> "Q"
+      0b10001011 -> "Q"
+      0b10010010 -> "R"
+      0b10010011 -> "R"
+      0b10011010 -> "S"
+      0b10011011 -> "S"
+      0b10100010 -> "T"
+      0b10100011 -> "T"
+      0b10101010 -> "U"
+      0b10101011 -> "U"
+      0b10110010 -> "V"
+      0b10110011 -> "V"
+      0b10111010 -> "W"
+      0b10111011 -> "W"
+      0b11000010 -> "X"
+      0b11000011 -> "X"
+      0b11001010 -> "Y"
+      0b11001011 -> "Y"
+      0b11010010 -> "Z"
+      0b11010011 -> "Z"
+      0b10000001 -> "0"
+      0b10001001 -> "1"
+      0b10010001 -> "2"
+      0b10011001 -> "3"
+      0b10100001 -> "4"
+      0b10101001 -> "5"
+      0b10110001 -> "6"
+      0b10111001 -> "7"
+      0b11000001 -> "8"
+      0b11001001 -> "9"
+      _ -> "?"
+    end
+
+    next_modifier = case char_num do
+      0b01111000 -> 1
+      0b00000010 -> 2
+      0b00000011 -> 2
+      _ -> 0
+    end
+
+    rest = if rest != <<>> do
+      <<next_byte::unsigned-size(8), next_rest::binary>> = rest
+      <<next_byte + next_modifier, next_rest::binary>>
+    else
+      rest
+    end
+
+    parse_server_call_str(pos + 1, curr <> char, rest)
+  end
+
+  defp find_start_byte(<<>>, _), do: nil
+  defp find_start_byte(<<0x00, 0x00, something::unsigned-size(8), _::binary>> = some_data, i) do
+    if something != 0x00 do
+      i + 2
+    else
+      <<_::binary-size(1), rest::binary>> = some_data
+      find_start_byte(rest, i + 1)
+    end
+  end
+
+  defp find_start_byte(some_data, i) do
+    <<_::binary-size(1), rest::binary>> = some_data
+    find_start_byte(rest, i + 1)
+  end
 end
