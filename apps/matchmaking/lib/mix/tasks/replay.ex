@@ -22,18 +22,6 @@ defmodule Mix.Tasks.Replay do
         convert_text = Enum.member?(rest, "--reveal-strings")
         comment = if convert_text, do: "#{comment || "???"} - #{Utility.reveal_strings(data)}", else: "#{comment || "???"}"
 
-        data = cond do
-          Enum.member?(rest, "--remove-count-header") && dir == :to_upstream ->
-            <<_::binary-size(8), rest::binary>> = data
-            rest
-
-          Enum.member?(rest, "--remove-count-header") && dir == :to_downstream ->
-            <<_::binary-size(9), rest::binary>> = data
-            rest
-
-          true -> data
-        end
-
         cond do
           dir == :to_upstream && Enum.member?(rest, "--only-downstream") -> :noop
           dir == :to_downstream && Enum.member?(rest, "--only-upstream") -> :noop

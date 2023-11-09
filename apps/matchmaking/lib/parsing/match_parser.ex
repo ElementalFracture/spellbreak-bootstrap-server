@@ -173,6 +173,10 @@ defmodule Parsing.MatchParser do
     {state, "Handshake 2??"}
   end
 
+  defp process_packet(_, :to_upstream, _, <<__header::binary-size(49), 0x00, 0x00, 0x00, 0x04, 0xC8, 0x03, 0x7A, 0x3B, 0x81, _::binary>>, state) do
+    {state, "Moving??"}
+  end
+
   defp process_packet(_, _, _, _, state), do: {state, "???"}
 
   defp parse_server_call_str(call_str), do: parse_server_call_str(0, "", call_str)
