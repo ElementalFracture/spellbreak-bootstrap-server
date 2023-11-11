@@ -1,5 +1,6 @@
 defmodule Matchmaking.Proxy.Server do
   alias Matchmaking.Proxy.{Connection, Connections, Utility}
+  alias Parsing.MatchState
   use GenServer
   require Logger
 
@@ -51,7 +52,8 @@ defmodule Matchmaking.Proxy.Server do
           direction: :to_downstream,
           external_port: external_downstream_port,
           dest_host: host,
-          dest_port: port
+          dest_port: port,
+          identifier: client_id
         ]})
 
         {:ok, upstream_conn} = DynamicSupervisor.start_child(Connections, {Connection, [
@@ -60,7 +62,8 @@ defmodule Matchmaking.Proxy.Server do
           direction: :to_upstream,
           external_port: external_upstream_port,
           dest_host: Application.fetch_env!(:matchmaking, :upstream_ip),
-          dest_port: Application.fetch_env!(:matchmaking, :upstream_port)
+          dest_port: Application.fetch_env!(:matchmaking, :upstream_port),
+          identifier: client_id
         ]})
 
         Connection.forward(downstream_conn, upstream_conn)
@@ -96,16 +99,13 @@ defmodule Matchmaking.Proxy.Server do
   # Recycles outbound ports when the client seems to have disappeared
   @impl true
   def handle_info(:cleanup, state) do
-    removed_client_ids = Enum.reduce(state.clients, [], fn {client_id, client}, acc ->
-      {host, _} = client_id
-      {conns, last_seen} = client
+    recycle_port_ttl = Application.fetch_env!(:matchmaking, :recycle_ports_minutes)
 
-      recycle_port_ttl = Application.fetch_env!(:matchmaking, :recycle_ports_minutes)
+    removed_client_ids = Enum.reduce(state.clients, [], fn {client_id, client}, acc ->
+      {conns, last_seen} = client
 
       if (60 * recycle_port_ttl) <= DateTime.diff(DateTime.utc_now(), last_seen, :second) do
         # Haven't seen a packet from this client in a while, add it to the recycle list
-        Logger.info("Recycling ports for #{Utility.host_to_ip(host)} since they've been missing for #{recycle_port_ttl} minutes...")
-
         Enum.each(conns, fn {_, conn} ->
           Connection.close(conn)
         end)
@@ -127,6 +127,31 @@ defmodule Matchmaking.Proxy.Server do
 
       new_ports ++ acc
     end)
+
+    match_state = Parsing.MatchParser.match_state(state.match_parser)
+    if removed_clients > 0 do
+      removed_clients |> Enum.map(fn {{host, port}, _} ->
+        player_info = MatchState.get_player_info(match_state, {host, port})
+        player_name = Map.get(player_info, :username, "Unknown player")
+
+        Logger.info("Recycling ports for #{Utility.host_to_ip(host)}:#{port} (#{player_name}) since they've been missing for #{recycle_port_ttl} minutes...")
+      end)
+    end
+
+    cond do
+      Enum.count(removed_clients) > 0 && Enum.count(remaining_clients) > 0 ->
+        Logger.info("Remaining clients:")
+        remaining_clients |> Enum.map(fn {{host, port}, _} ->
+          player_info = MatchState.get_player_info(match_state, {host, port})
+          player_name = Map.get(player_info, :username, "Unknown player")
+          Logger.info("- #{Utility.host_to_ip(host)}:#{port} (#{player_name})")
+        end)
+
+      Enum.count(removed_clients) > 0 ->
+        Logger.info("No remaining clients")
+
+      true -> :ok
+    end
 
     {:noreply, %{state | clients: remaining_clients, available_outbound: state.available_outbound ++ newly_available_ports}}
   end

@@ -8,13 +8,14 @@ defmodule Matchmaking.Proxy.Connection do
     direction: direction,
     external_port: external_port,
     dest_host: dest_host,
-    dest_port: dest_port
+    dest_port: dest_port,
+    identifier: identifier
   ) do
-    GenServer.start_link(__MODULE__, {match_parser, downstream_socket, direction, external_port, dest_host, dest_port})
+    GenServer.start_link(__MODULE__, {identifier, match_parser, downstream_socket, direction, external_port, dest_host, dest_port})
   end
 
   @impl true
-  def init({match_parser, downstream_socket, direction, external_port, dest_host, dest_port}) do
+  def init({identifier, match_parser, downstream_socket, direction, external_port, dest_host, dest_port}) do
     {:ok, socket} = if direction == :to_downstream do
       {:ok, downstream_socket}
     else
@@ -22,6 +23,7 @@ defmodule Matchmaking.Proxy.Connection do
     end
 
     {:ok, %{
+      identifier: identifier,
       match_parser: match_parser,
       socket: socket,
       direction: direction,
@@ -72,7 +74,7 @@ defmodule Matchmaking.Proxy.Connection do
 
   @impl true
   def handle_cast({:send, ts, source_host, source_port, data}, %{socket: socket} = state) do
-    MatchParser.parse(state.match_parser, self(), ts, state.direction, {{source_host, source_port}, {state.dest_host, state.dest_port}}, data)
+    MatchParser.parse(state.match_parser, state.identifier, ts, state.direction, {{source_host, source_port}, {state.dest_host, state.dest_port}}, data)
     case :gen_udp.send(socket, state.dest_host, state.dest_port, data) do
       :ok -> :ok
       {:error, :closed} -> :ok

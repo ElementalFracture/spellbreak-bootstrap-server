@@ -24,6 +24,10 @@ defmodule Parsing.MatchParser do
     GenServer.cast(pid, {:parse, conn, ts, direction, {source, destination}, data})
   end
 
+  def match_state(pid) do
+    GenServer.call(pid, :match_state)
+  end
+
   def wait(pid) do
     GenServer.call(pid, :wait, 6000000)
   end
@@ -49,6 +53,11 @@ defmodule Parsing.MatchParser do
     })
 
     {:noreply, state}
+  end
+
+  @impl true
+  def handle_call(:match_state, _, state) do
+    {:reply, state.match_state, state}
   end
 
   @impl true
@@ -112,22 +121,56 @@ defmodule Parsing.MatchParser do
     {state, "SpawnMatchBot??"}
   end
 
-  defp process_packet(conn, :to_upstream, _, <<__header::binary-size(13), 0xF3, data::binary>>, state) do
-    [_, <<map_number::unsigned-size(16), _::binary>> | _] = String.split(data, <<0x71, 0x58, 0x31>>)
-    map = case map_number do
-      0x4242 -> "Hymnwood"
-      0x2242 -> "Halcyon"
-      0x0242 -> "Dustpool"
-      0xE241 -> "Bogmore"
-      0xC241 -> "Banehelm"
-      _ -> "???"
-    end
+  # defp process_packet(conn, :to_upstream, _, <<__header::binary-size(13), 0xF3, data::binary>>, state) do
+  #   player_info = MatchState.get_player_info(state.match_state, conn)
+  #   player_name = Map.get(player_info, :username, "Unknown player")
 
-    player_info = MatchState.get_player_info(state.match_state, conn)
-    player_name = Map.get(player_info, :username, "Unknown player")
-    Logger.info("Map selected by #{player_name}: #{map}")
+  #   cond do
+  #     # match?([_, _ | _], String.split(data, <<0x71, 0x58, 0x31>>)) ->
+  #     #   [_, <<map_number::unsigned-size(16), _::binary>> | _] = String.split(data, <<0x71, 0x58, 0x31>>)
+  #     #     # Dominion Host
+  #     #     map = case map_number do
+  #     #       0x4242 -> "Hymnwood"
+  #     #       0x2242 -> "Halcyon"
+  #     #       0x0242 -> "Dustpool"
+  #     #       0xE241 -> "Bogmore"
+  #     #       0xC241 -> "Banehelm"
+  #     #       _ -> "???"
+  #     #     end
 
-    {state, "Map: #{map}"}
+  #     #     [_, <<max_score_base::unsigned-little-size(32), _::binary>> | _] = String.split(data, <<0x57, 0x81, 0x8A, 0xC9, 0x0A>>)
+  #     #     max_score = trunc((max_score_base - 5)/8)
+
+  #     #     [_, <<max_score_pp_base::unsigned-little-size(32), _::binary>> | _] = String.split(data, <<0x50, 0x6C, 0x56>>)
+  #     #     max_score_pp = trunc(max_score_pp_base/64)
+
+  #     #     Logger.info("#{player_name} selected Dominion - #{map}, Max Score: #{max_score}, Max Score (Per-Player): #{max_score_pp}")
+
+  #     #     {state, "Selected Game - Dominion - Map: #{map}, Max Score: #{max_score}, Max Score (Per-Player): #{max_score_pp}"}
+
+  #     # true ->
+  #     #   Logger.info("#{player_name} selected Battle Royale")
+  #     #   {state, "Selected Game - Battle Royale"}
+
+  #     true ->
+  #       {state, "Selected Game - ???"}
+  #   end
+  # end
+
+  defp process_packet(_, :to_upstream, _, <<__header::binary-size(13), 0x4B, _::binary>>, state) do
+    {state, "Movement: Walking??"}
+  end
+
+  defp process_packet(_, :to_upstream, _, <<__header::binary-size(13), 0x77, _::binary>>, state) do
+    {state, "Movement: Stopping??"}
+  end
+
+  defp process_packet(_, :to_upstream, _, <<__header::binary-size(13), 0x09, _::binary>>, state) do
+    {state, "Movement: Vertical??"}
+  end
+
+  defp process_packet(_, :to_upstream, _, <<__header::binary-size(13), 0x5B, _::binary>>, state) do
+    {state, "Movement: Vertical???"}
   end
 
   defp process_packet(conn, :to_upstream, _,  <<
@@ -161,10 +204,6 @@ defmodule Parsing.MatchParser do
 
   defp process_packet(_, :to_upstream, _, <<__header::binary-size(9), 24>>, state) do
     {state, "Handshake??"}
-  end
-
-  defp process_packet(_, :to_upstream, _, <<__header::binary-size(49), 0x00, 0x00, 0x00, 0x04, 0xC8, 0x03, 0x7A, 0x3B, 0x81, _::binary>>, state) do
-    {state, "Moving??"}
   end
 
   defp process_packet(_, :to_downstream, _, <<__header::binary-size(11), 1, 116, 128, 96, 46, 161, _::binary>>, state) do
