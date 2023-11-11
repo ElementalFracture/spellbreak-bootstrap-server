@@ -6,28 +6,38 @@ defmodule Mix.Tasks.Compare do
     |> Stream.map(&String.trim/1)
     |> Stream.with_index
     |> Stream.transform(<<>>, fn ({line, _index}, prev_data) ->
-      [[_, something, byte_str, something_else]] = Regex.scan(~r/^(.+?): (.+?) (.+)$/, line)
+      case Regex.scan(~r/^(.+?): (.+?) (.+)$/, line) do
+        [[_, something, byte_str, something_else]] ->
+          bytes = byte_str |> String.graphemes() |> Enum.chunk_every(2)
+          data = bytes |> Enum.reduce(<<>>, fn byte_hex, acc -> acc <> Base.decode16!(Enum.join(byte_hex, "")) end)
 
-      bytes = byte_str |> String.graphemes() |> Enum.chunk_every(2)
-      data = bytes |> Enum.reduce(<<>>, fn byte_hex, acc -> acc <> Base.decode16!(Enum.join(byte_hex, "")) end)
+          smallest_data_len = min(byte_size(prev_data), byte_size(data))
+          overlapping_byte_range = if smallest_data_len > 0, do: (0..smallest_data_len-1), else: []
 
-      smallest_data_len = min(byte_size(prev_data), byte_size(data))
-      overlapping_byte_range = if smallest_data_len > 0, do: (0..smallest_data_len-1), else: []
+          byte_comparison = overlapping_byte_range |> Enum.map(fn i ->
+            <<_::binary-size(i), prev_byte::unsigned-size(8), _::binary>> = prev_data
+            <<_::binary-size(i), curr_byte::unsigned-size(8), _::binary>> = data
 
-      byte_comparison = overlapping_byte_range |> Enum.map(fn i ->
-        <<_::binary-size(i), prev_byte::unsigned-size(8), _::binary>> = prev_data
-        <<_::binary-size(i), curr_byte::unsigned-size(8), _::binary>> = data
+            cond do
+              prev_byte < curr_byte -> "++"
+              prev_byte > curr_byte -> "--"
+              true -> "=="
+            end
+          end)
 
-        cond do
-          prev_byte < curr_byte -> "++"
-          prev_byte > curr_byte -> "--"
-          true -> "=="
+          if Enum.count(byte_comparison) > 0 do
+            IO.puts("#{something}: #{byte_comparison |> Enum.join("")} #{something_else}")
+          end
+
+          IO.puts("#{something}: #{Base.encode16(data)} #{something_else}")
+
+          {[], data}
+
+        _ ->
+          IO.puts(line)
+          {[], prev_data}
+
         end
-      end)
-
-      IO.puts("#{something}: #{byte_comparison |> Enum.join("")} #{something_else}")
-      IO.puts("#{something}: #{Base.encode16(data)} #{something_else}")
-      {[], data}
     end)
     |> Stream.run()
   end

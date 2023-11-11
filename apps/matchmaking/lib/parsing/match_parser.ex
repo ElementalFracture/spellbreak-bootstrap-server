@@ -112,6 +112,24 @@ defmodule Parsing.MatchParser do
     {state, "SpawnMatchBot??"}
   end
 
+  defp process_packet(conn, :to_upstream, _, <<__header::binary-size(13), 0xF3, data::binary>>, state) do
+    [_, <<map_number::unsigned-size(16), _::binary>> | _] = String.split(data, <<0x71, 0x58, 0x31>>)
+    map = case map_number do
+      0x4242 -> "Hymnwood"
+      0x2242 -> "Halcyon"
+      0x0242 -> "Dustpool"
+      0xE241 -> "Bogmore"
+      0xC241 -> "Banehelm"
+      _ -> "???"
+    end
+
+    player_info = MatchState.get_player_info(state.match_state, conn)
+    player_name = Map.get(player_info, :username, "Unknown player")
+    Logger.info("Map selected by #{player_name}: #{map}")
+
+    {state, "Map: #{map}"}
+  end
+
   defp process_packet(conn, :to_upstream, _,  <<
     _::binary-size(9),
     0x20, 0x01,
@@ -145,6 +163,10 @@ defmodule Parsing.MatchParser do
     {state, "Handshake??"}
   end
 
+  defp process_packet(_, :to_upstream, _, <<__header::binary-size(49), 0x00, 0x00, 0x00, 0x04, 0xC8, 0x03, 0x7A, 0x3B, 0x81, _::binary>>, state) do
+    {state, "Moving??"}
+  end
+
   defp process_packet(_, :to_downstream, _, <<__header::binary-size(11), 1, 116, 128, 96, 46, 161, _::binary>>, state) do
     {state, "Heartbeat Request 1??"}
   end
@@ -171,10 +193,6 @@ defmodule Parsing.MatchParser do
 
   defp process_packet(_, :to_downstream, _,  <<132, 146, 126, 197, 42, 252, 117, 35, 140, 131, 164, 193, 184, 44, 96, 15>>, state) do
     {state, "Handshake 2??"}
-  end
-
-  defp process_packet(_, :to_upstream, _, <<__header::binary-size(49), 0x00, 0x00, 0x00, 0x04, 0xC8, 0x03, 0x7A, 0x3B, 0x81, _::binary>>, state) do
-    {state, "Moving??"}
   end
 
   defp process_packet(_, _, _, _, state), do: {state, "???"}
