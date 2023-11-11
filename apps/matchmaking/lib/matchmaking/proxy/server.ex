@@ -102,7 +102,7 @@ defmodule Matchmaking.Proxy.Server do
 
       recycle_port_ttl = Application.fetch_env!(:matchmaking, :recycle_ports_minutes)
 
-      if recycle_port_ttl <= DateTime.diff(DateTime.utc_now(), last_seen, :minute) do
+      if (60 * recycle_port_ttl) <= DateTime.diff(DateTime.utc_now(), last_seen, :second) do
         # Haven't seen a packet from this client in a while, add it to the recycle list
         Logger.info("Recycling ports for #{Utility.host_to_ip(host)} since they've been missing for #{recycle_port_ttl} minutes...")
 
