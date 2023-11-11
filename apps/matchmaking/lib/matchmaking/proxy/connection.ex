@@ -73,7 +73,10 @@ defmodule Matchmaking.Proxy.Connection do
   @impl true
   def handle_cast({:send, ts, source_host, source_port, data}, %{socket: socket} = state) do
     MatchParser.parse(state.match_parser, self(), ts, state.direction, {{source_host, source_port}, {state.dest_host, state.dest_port}}, data)
-    :ok = :gen_udp.send(socket, state.dest_host, state.dest_port, data)
+    case :gen_udp.send(socket, state.dest_host, state.dest_port, data) do
+      :ok -> :ok
+      {:error, :closed} -> :ok
+    end
 
     {:noreply, state}
   end
