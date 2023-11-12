@@ -34,7 +34,7 @@ defmodule Parsing.MatchParser do
 
   @impl true
   def handle_cast({:parse, conn, ts, direction, {source, destination}, data}, state) do
-    {data, state, comment} = case process_packet(conn, direction, {source, destination}, data, state) do
+    {data, state, comment} = case process_packet_strip(conn, direction, {source, destination}, data, state) do
       {new_data, state, comment} -> {new_data, state, comment}
       {state, comment} -> {data, state, comment}
     end
@@ -65,8 +65,7 @@ defmodule Parsing.MatchParser do
     {:reply, :ok, state}
   end
 
-  # Processes a packet from a client, headed to the server
-  defp process_packet(_, :to_upstream, {source, _}, <<
+  defp process_packet_strip(_, :to_upstream, {source, _}, <<
     1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 8
   >>, state) do
     {source_host, _} = source
@@ -75,8 +74,33 @@ defmodule Parsing.MatchParser do
     {state, :hello}
   end
 
+  defp process_packet_strip(conn, direction, pathway, <<_packet_count::binary-size(9), data::binary>>, state) do
+    process_packet(conn, direction, pathway, data, state)
+  end
+
+  defp process_packet_strip(conn, direction, pathway, data, state) do
+    {state, "Packet without header???"}
+  end
+
+  defp process_packet(_, :to_downstream, _, <<__header::binary-size(5), 0x80, _::binary>>, state) do
+    {state, "Heartbeat Ping??"}
+  end
+
+  defp process_packet(_, :to_downstream, _, <<__header::binary-size(2), 0x18>>, state) do
+    {state, "Handshake Pong??"}
+  end
+
+  defp process_packet(_, :to_upstream, _, <<_::binary-size(3), 0x18, _::binary>>, state) do
+    {state, "Handshake"}
+  end
+
+  defp process_packet(_, :to_upstream, _, <<_::binary-size(3), 0x82, _::binary>>, state) do
+    {state, "Heartbeat"}
+  end
+
+  # Processes a packet from a client, headed to the server
   defp process_packet(conn, :to_upstream, {source, _}, <<
-    _header::binary-size(27),
+    _header::binary-size(18),
     # "/Game/Maps/" encoded in ASCII * 2
     94, 142, 194, 218, 202, 94, 154, 194, 224, 230, 94,
     contents::binary
@@ -101,7 +125,7 @@ defmodule Parsing.MatchParser do
   end
 
   defp process_packet(conn, :to_upstream, {source, _}, <<
-    _header::binary-size(14),
+    _header::binary-size(5),
     11, 0, 128, 1
   >>, state) do
     player_info = MatchState.get_player_info(state.match_state, conn)
@@ -113,7 +137,7 @@ defmodule Parsing.MatchParser do
     {state, "Player Disconnected: #{player_name}"}
   end
 
-  defp process_packet(conn, :to_upstream, _,  <<_::binary-size(31), 0x61, 0x00, 0x87, 0x60, 0xBE, 0x80, 0x74, 0x59, _::binary-size(27), 0x00, 0x00, 0x0C>>, state) do
+  defp process_packet(conn, :to_upstream, _,  <<_::binary-size(22), 0x61, 0x00, 0x87, 0x60, 0xBE, 0x80, 0x74, 0x59, _::binary-size(27), 0x00, 0x00, 0x0C>>, state) do
     player_info = MatchState.get_player_info(state.match_state, conn)
     player_name = Map.get(player_info, :username, "Unknown player")
     Logger.info("'SpawnMatchBot' executed by '#{player_name}'")
@@ -121,62 +145,46 @@ defmodule Parsing.MatchParser do
     {state, "SpawnMatchBot??"}
   end
 
-  # defp process_packet(conn, :to_upstream, _, <<__header::binary-size(13), 0xF3, data::binary>>, state) do
+  # defp process_packet(conn, :to_upstream, _, <<__header::binary-size(4), 0xF3, _::binary-size(434), 0x45, _::binary>> = data, state) do
   #   player_info = MatchState.get_player_info(state.match_state, conn)
   #   player_name = Map.get(player_info, :username, "Unknown player")
+  #   Logger.info("Player '#{player_name}' selected game - Dominion")
 
   #   cond do
-  #     # match?([_, _ | _], String.split(data, <<0x71, 0x58, 0x31>>)) ->
-  #     #   [_, <<map_number::unsigned-size(16), _::binary>> | _] = String.split(data, <<0x71, 0x58, 0x31>>)
-  #     #     # Dominion Host
-  #     #     map = case map_number do
-  #     #       0x4242 -> "Hymnwood"
-  #     #       0x2242 -> "Halcyon"
-  #     #       0x0242 -> "Dustpool"
-  #     #       0xE241 -> "Bogmore"
-  #     #       0xC241 -> "Banehelm"
-  #     #       _ -> "???"
-  #     #     end
+  # #     # match?([_, _ | _], String.split(data, <<0x71, 0x58, 0x31>>)) ->
+  # #     #   [_, <<map_number::unsigned-size(16), _::binary>> | _] = String.split(data, <<0x71, 0x58, 0x31>>)
+  # #     #     # Dominion Host
+  # #     #     map = case map_number do
+  # #     #       0x4242 -> "Hymnwood"
+  # #     #       0x2242 -> "Halcyon"
+  # #     #       0x0242 -> "Dustpool"
+  # #     #       0xE241 -> "Bogmore"
+  # #     #       0xC241 -> "Banehelm"
+  # #     #       _ -> "???"
+  # #     #     end
 
-  #     #     [_, <<max_score_base::unsigned-little-size(32), _::binary>> | _] = String.split(data, <<0x57, 0x81, 0x8A, 0xC9, 0x0A>>)
-  #     #     max_score = trunc((max_score_base - 5)/8)
+  # #     #     [_, <<max_score_base::unsigned-little-size(32), _::binary>> | _] = String.split(data, <<0x57, 0x81, 0x8A, 0xC9, 0x0A>>)
+  # #     #     max_score = trunc((max_score_base - 5)/8)
 
-  #     #     [_, <<max_score_pp_base::unsigned-little-size(32), _::binary>> | _] = String.split(data, <<0x50, 0x6C, 0x56>>)
-  #     #     max_score_pp = trunc(max_score_pp_base/64)
+  # #     #     [_, <<max_score_pp_base::unsigned-little-size(32), _::binary>> | _] = String.split(data, <<0x50, 0x6C, 0x56>>)
+  # #     #     max_score_pp = trunc(max_score_pp_base/64)
 
-  #     #     Logger.info("#{player_name} selected Dominion - #{map}, Max Score: #{max_score}, Max Score (Per-Player): #{max_score_pp}")
+  # #     #     Logger.info("#{player_name} selected Dominion - #{map}, Max Score: #{max_score}, Max Score (Per-Player): #{max_score_pp}")
 
-  #     #     {state, "Selected Game - Dominion - Map: #{map}, Max Score: #{max_score}, Max Score (Per-Player): #{max_score_pp}"}
+  # #     #     {state, "Selected Game - Dominion - Map: #{map}, Max Score: #{max_score}, Max Score (Per-Player): #{max_score_pp}"}
 
-  #     # true ->
-  #     #   Logger.info("#{player_name} selected Battle Royale")
-  #     #   {state, "Selected Game - Battle Royale"}
+  # #     # true ->
+  # #     #   Logger.info("#{player_name} selected Battle Royale")
+  # #     #   {state, "Selected Game - Battle Royale"}
 
   #     true ->
-  #       {state, "Selected Game - ???"}
+  #       {state, "Selected Game - Dominion"}
   #   end
   # end
 
-  defp process_packet(_, :to_upstream, _, <<__header::binary-size(13), 0x4B, _::binary>>, state) do
-    {state, "Movement: Walking??"}
-  end
-
-  defp process_packet(_, :to_upstream, _, <<__header::binary-size(13), 0x77, _::binary>>, state) do
-    {state, "Movement: Stopping??"}
-  end
-
-  defp process_packet(_, :to_upstream, _, <<__header::binary-size(13), 0x09, _::binary>>, state) do
-    {state, "Movement: Vertical??"}
-  end
-
-  defp process_packet(_, :to_upstream, _, <<__header::binary-size(13), 0x5B, _::binary>>, state) do
-    {state, "Movement: Vertical???"}
-  end
-
   defp process_packet(conn, :to_upstream, _,  <<
-    _::binary-size(9),
-    0x20, 0x01,
-    _::binary-size(2),
+    0x20,
+    _::binary-size(3),
     rest::binary>>,
   state) do
     start_byte = find_start_byte(rest, 0)
@@ -196,42 +204,6 @@ defmodule Parsing.MatchParser do
     else
       {state, "???"}
     end
-  end
-
-  defp process_packet(_, :to_upstream, _, <<_header::binary-size(9), 128, 1, 28, 130, 249, 2, 210, 101, 129, _::binary>>, state) do
-    {state, "Heartbeat??"}
-  end
-
-  defp process_packet(_, :to_upstream, _, <<__header::binary-size(9), 24>>, state) do
-    {state, "Handshake??"}
-  end
-
-  defp process_packet(_, :to_downstream, _, <<__header::binary-size(11), 1, 116, 128, 96, 46, 161, _::binary>>, state) do
-    {state, "Heartbeat Request 1??"}
-  end
-
-  defp process_packet(_, :to_downstream, _, <<__header::binary-size(21), 48, 128, 14, 16, 204, 37, _::binary-size(4), 104>>, state) do
-    {state, "Heartbeat Request 2??"}
-  end
-
-  defp process_packet(_, :to_downstream, _, <<__header::binary-size(54), 193, 242, 72, 5, 0, 12, _::binary-size(9), 0, 0, 6>>, state) do
-    {state, "Heartbeat Request 3??"}
-  end
-
-  defp process_packet(_, :to_downstream, _, <<__header::binary-size(27), 71, 255, 41, 35, 71, 171, 177, 21, 72, 110, 127, 94, 69, 0, 0, 0, 0, 0, 0, 0, 0, 0, 51, 159, 196, 75, 0, 130, 194, 0, 1, 24, 0, 0, 0, 0, 0, 24>>, state) do
-    {state, "Heartbeat Request 4??"}
-  end
-
-  defp process_packet(_, :to_downstream, _, <<__header::binary-size(42), 0, 32, 96, 16, 44, 143, 84, 0, 192, _::binary>>, state) do
-    {state, "Heartbeat Request 5??"}
-  end
-
-  defp process_packet(_, :to_downstream, _, <<__header::binary-size(10), 24>>, state) do
-    {state, "Handshake??"}
-  end
-
-  defp process_packet(_, :to_downstream, _,  <<132, 146, 126, 197, 42, 252, 117, 35, 140, 131, 164, 193, 184, 44, 96, 15>>, state) do
-    {state, "Handshake 2??"}
   end
 
   defp process_packet(_, _, _, _, state), do: {state, "???"}

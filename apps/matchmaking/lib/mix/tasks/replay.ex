@@ -3,7 +3,18 @@ defmodule Mix.Tasks.Replay do
   alias Parsing.MatchParser
   alias Matchmaking.Proxy.Utility
 
-  def run([replay_filename | rest]) do
+  def run([replay_filename | _] = args) do
+    {opts, _, _} = OptionParser.parse(args, strict: [
+      translate: :boolean,
+      reveal_strings: :boolean,
+      only_downstream: :boolean,
+      only_upstream: :boolean,
+      no_heartbeat: :boolean,
+      select: [:string, :keep],
+    ])
+
+    selected_strings = opts |> Keyword.get_values(:select)
+
     {:ok, match_parser} = GenServer.start_link(MatchParser, :ok)
 
     File.stream!(replay_filename)
@@ -18,14 +29,18 @@ defmodule Mix.Tasks.Replay do
       source = if dir == :to_upstream, do: client, else: server
       dest = if dir == :to_upstream, do: server, else: client
 
-      if Enum.member?(rest, "--translate") do
-        convert_text = Enum.member?(rest, "--reveal-strings")
+      if opts[:translate] do
+        convert_text = opts[:reveal_strings]
         comment = if convert_text, do: "#{comment || "???"} - #{Utility.reveal_strings(data)}", else: "#{comment || "???"}"
 
+        not_selected = Enum.count(selected_strings) > 0 && Enum.find(selected_strings, fn selected -> String.contains?(comment, selected) || String.contains?(Base.encode16(data), selected) end) == nil
+
         cond do
-          dir == :to_upstream && Enum.member?(rest, "--only-downstream") -> :noop
-          dir == :to_downstream && Enum.member?(rest, "--only-upstream") -> :noop
-          (comment =~ "Heartbeat" || comment =~ "Handshake") && Enum.member?(rest, "--no-heartbeat") -> :noop
+          dir == :to_upstream && opts[:only_downstream] -> :noop
+          dir == :to_downstream && opts[:only_upstream] -> :noop
+          not_selected -> :noop
+
+          (comment =~ "Heartbeat" || comment =~ "Handshake") && opts[:no_heartbeat] -> :noop
 
           true ->
             IO.puts("#{ts} - #{server} #{direction} #{client}: #{Base.encode16(data)} ---# #{comment} #---")
