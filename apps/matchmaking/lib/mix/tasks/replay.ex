@@ -6,7 +6,7 @@ defmodule Mix.Tasks.Replay do
 
   def run([replay_filename | rest]) do
     {:ok, match_logger} = GenServer.start_link(MatchLogger, nil)
-    {:ok, match_state} = GenServer.start_link(MatchState, %{logger: match_logger})
+    {:ok, match_state} = GenServer.start_link(MatchState, %{server_name: :test_server, logger: match_logger})
     {:ok, match_parser} = GenServer.start_link(MatchParser, %{
       match_state: match_state,
       logger: match_logger
