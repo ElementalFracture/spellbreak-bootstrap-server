@@ -2,20 +2,28 @@ defmodule Matchmaking.Proxy.Connection do
   alias Parsing.MatchParser
   use GenServer
 
-  def start_link(
-    match_parser: match_parser,
-    downstream_socket: downstream_socket,
-    direction: direction,
-    external_port: external_port,
-    dest_host: dest_host,
-    dest_port: dest_port,
-    identifier: identifier
-  ) do
-    GenServer.start_link(__MODULE__, {identifier, match_parser, downstream_socket, direction, external_port, dest_host, dest_port})
+  def start_link(opts) do
+    GenServer.start_link(__MODULE__, {
+      Map.fetch!(opts, :identifier),
+      Map.fetch!(opts, :match_parser),
+      Map.fetch!(opts, :downstream_socket),
+      Map.fetch!(opts, :direction),
+      Map.fetch!(opts, :external_port),
+      Map.fetch!(opts, :dest_host),
+      Map.fetch!(opts, :dest_port)
+    })
   end
 
   @impl true
-  def init({identifier, match_parser, downstream_socket, direction, external_port, dest_host, dest_port}) do
+  def init({
+    identifier,
+    match_parser,
+    downstream_socket,
+    direction,
+    external_port,
+    dest_host,
+    dest_port
+  }) do
     {:ok, socket} = if direction == :to_downstream do
       {:ok, downstream_socket}
     else

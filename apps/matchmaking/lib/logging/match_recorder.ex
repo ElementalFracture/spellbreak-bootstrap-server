@@ -2,33 +2,23 @@ defmodule Logging.MatchRecorder do
   use GenServer
   require Logger
 
-  def start_link(base_directory: base_directory) do
-    GenServer.start_link(__MODULE__, base_directory, name: __MODULE__)
+  def start_link(%{recording_directory: base_directory}, opts \\ []) do
+    GenServer.start_link(__MODULE__, base_directory, opts)
   end
 
   @impl true
   def init(base_directory) do
-    match_name = "unknown-match"
-
     {:ok, %{
       base_directory: base_directory,
-      match_name: match_name,
       packet_file: nil
-    }, {:continue, {:set_match_name, match_name}}}
+    }, {:continue, :initialize}}
   end
 
-  @impl true
-  def handle_continue({:set_match_name, match_name}, state) do
-    change_match_name(match_name)
-
-    {:noreply, state}
+  def set_match_name(pid, new_match_name) do
+    GenServer.call(pid, {:set_match_name, new_match_name})
   end
 
-  def change_match_name(new_match_name) do
-    GenServer.cast(__MODULE__, {:change_match_name, new_match_name})
-  end
-
-  def record(%{
+  def record(pid, %{
     state: _,
     timestamp: _,
     source: _,
@@ -37,23 +27,23 @@ defmodule Logging.MatchRecorder do
     comment: _,
     data: _
   } = packet) do
-    GenServer.cast(__MODULE__, {:record, packet})
+    GenServer.cast(pid, {:record, packet})
   end
 
   @impl true
-  def handle_cast({:change_match_name, new_match_name}, %{base_directory: base_directory, packet_file: packet_file} = state) do
-    if Application.fetch_env!(:matchmaking, :recording_enabled) do
-      if packet_file, do: File.close(packet_file)
-      filename = "#{base_directory}/#{new_match_name}/packets.log"
+  def handle_continue(:initialize, state) do
+    {:ok, filename, packet_file} = start_new_recording("no-match", state)
+    if filename, do: Logger.info("Match recording to #{filename}...")
 
-      File.mkdir_p!("#{base_directory}/#{new_match_name}")
-      {:ok, file} = File.open(filename, [:write])
-      Logger.info("Match recording to #{filename}...")
+    {:noreply, %{state | packet_file: packet_file}}
+  end
 
-      {:noreply, %{ state | match_name: new_match_name, packet_file: file }}
-    else
-      {:noreply, state}
-    end
+  @impl true
+  def handle_call({:set_match_name, new_match_name}, _, state) do
+    {:ok, filename, packet_file} = start_new_recording(new_match_name, state)
+    if filename, do: Logger.info("Match recording to #{filename}...")
+
+    {:reply, :ok, %{ state | packet_file: packet_file }}
   end
 
   def handle_cast({:record, _}, %{packet_file: nil} = state), do: {:noreply, state}
@@ -77,5 +67,21 @@ defmodule Logging.MatchRecorder do
     IO.binwrite(packet_file, " ---# #{comment || "???"} #---\n")
 
     {:noreply, state}
+  end
+
+  defp start_new_recording(match_name, state) do
+    %{base_directory: base_dir, packet_file: packet_file} = state
+    if packet_file, do: File.close(packet_file)
+
+    {filename, new_file} = if base_dir do
+      filename = "#{base_dir}/#{match_name}.recording"
+      {:ok, new_file} = File.open(filename, [:append])
+
+      {filename, new_file}
+    else
+      {nil, nil}
+    end
+
+    {:ok, filename, new_file}
   end
 end

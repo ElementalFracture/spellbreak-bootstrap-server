@@ -1,0 +1,4 @@
+%{
+  "file_system": {:hex, :file_system, "1.0.0", "b689cc7dcee665f774de94b5a832e578bd7963c8e637ef940cd44327db7de2cd", [:mix], [], "hexpm", "6752092d66aec5a10e662aefeed8ddb9531d79db0bc145bb8c40325ca1d8536d"},
+  "net_address": {:hex, :net_address, "0.3.0", "0fd8bdccdcb74986b7e808bc1f99a7cf4bbc8232bffd6958e18a963500adb541", [:mix], [], "hexpm", "678886a834e031009eda8a45f3e2cbda94a20a1e5fbc174e88e3f031eeb62c5f"},
+}

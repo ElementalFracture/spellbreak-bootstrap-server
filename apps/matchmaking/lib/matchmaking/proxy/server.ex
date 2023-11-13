@@ -1,6 +1,7 @@
 defmodule Matchmaking.Proxy.Server do
   alias Matchmaking.Proxy.{Connection, Connections, Utility}
-  alias Parsing.MatchState
+  alias Parsing.{MatchParser, MatchState}
+  alias Logging.{MatchLogger, MatchRecorder}
   use GenServer
   require Logger
 
@@ -8,25 +9,77 @@ defmodule Matchmaking.Proxy.Server do
   Handles incoming UDP communication with clients
   """
 
-  def start_link(port: port) do
-    GenServer.start_link(__MODULE__, port)
+  def start_link(%{
+    name: name,
+    port: port,
+    destination: dest,
+    outbound_ports: outbound_ports
+  }, opts \\ %{}) do
+    opts = Map.put(opts, :name, name)
+    opts = Map.put(opts, :destination, dest)
+
+    GenServer.start_link(__MODULE__, [port, outbound_ports, opts])
   end
 
   @impl true
-  def init(port) do
+  def init([port, outbound_ports, opts]) do
     {:ok, socket} = :gen_udp.open(port, [:binary, active: true])
-    {:ok, match_parser} = Parsing.MatchParser.start_link([])
 
-    outbound_port_start = Application.fetch_env!(:matchmaking, :outbound_port_start)
-    outbound_port_end = Application.fetch_env!(:matchmaking, :outbound_port_end)
+    server_name = Map.get(opts, :name, :no_name)
+    {host, host_port} = opts.destination
+    Logger.info("Proxy #{server_name} started, pointing 0.0.0.0:#{port} -> #{IP.to_string(host)}:#{host_port}")
+
+    match_logger_id = "#{opts.name}_MatchLogger" |> String.to_atom()
+    match_state_id = "#{opts.name}_MatchState" |> String.to_atom()
+    match_recorder_id = "#{opts.name}_MatchRecorder" |> String.to_atom()
+    match_parser_id = "#{opts.name}_MatchParser" |> String.to_atom()
+    children = [
+      %{
+        id: MatchLogger,
+        start: {MatchLogger, :start_link, [%{
+          log_directory: Map.get(opts, :log_dir)
+        }, [name: match_logger_id]]}
+      },
+      %{
+        id: MatchRecorder,
+        start: {MatchRecorder, :start_link, [%{
+          recording_directory: Map.get(opts, :recording_dir)
+        }, [name: match_recorder_id]]}
+      },
+      %{
+        id: MatchState,
+        start: {MatchState, :start_link, [%{
+          server_name: server_name,
+          logger: match_logger_id,
+          recorder: match_recorder_id,
+          log_directory: Map.get(opts, :log_dir)
+        }, [name: match_state_id]]}
+      },
+      %{
+        id: MatchParser,
+        start: {MatchParser, :start_link, [%{
+          logger: match_logger_id,
+          match_state: match_state_id,
+          recorder: match_recorder_id
+        }, [name: match_parser_id]]}
+      }
+    ]
+
+    supervisor_id = "#{opts.name}_Supervisor" |> String.to_atom()
+    {:ok, supervisor} = Supervisor.start_link(children, [strategy: :one_for_one, name: supervisor_id])
 
     schedule_cleanup()
 
     {:ok, %{
       socket: socket,
-      match_parser: match_parser,
+      supervisor: supervisor,
+      logger: match_logger_id,
+      match_parser: match_parser_id,
+      match_state: match_state_id,
+      recorder: match_recorder_id,
       clients: %{},
-      available_outbound: Enum.to_list(outbound_port_start..outbound_port_end)
+      opts: opts,
+      available_outbound: outbound_ports
     }}
   end
 
@@ -46,7 +99,7 @@ defmodule Matchmaking.Proxy.Server do
         [external_upstream_port, external_downstream_port] = Enum.take_random(state.available_outbound, 2)
         available_outbound = state.available_outbound |> Enum.reject(&(Enum.member?([external_upstream_port, external_downstream_port], &1)))
 
-        {:ok, downstream_conn} = DynamicSupervisor.start_child(Connections, {Connection, [
+        {:ok, downstream_conn} = DynamicSupervisor.start_child(Connections, {Connection, %{
           match_parser: state.match_parser,
           downstream_socket: state.socket,
           direction: :to_downstream,
@@ -54,17 +107,18 @@ defmodule Matchmaking.Proxy.Server do
           dest_host: host,
           dest_port: port,
           identifier: client_id
-        ]})
+        }})
 
-        {:ok, upstream_conn} = DynamicSupervisor.start_child(Connections, {Connection, [
+        {dest_host, dest_port} = state.opts[:destination]
+        {:ok, upstream_conn} = DynamicSupervisor.start_child(Connections, {Connection, %{
           match_parser: state.match_parser,
           downstream_socket: state.socket,
           direction: :to_upstream,
           external_port: external_upstream_port,
-          dest_host: Application.fetch_env!(:matchmaking, :upstream_ip),
-          dest_port: Application.fetch_env!(:matchmaking, :upstream_port),
+          dest_host: dest_host,
+          dest_port: dest_port,
           identifier: client_id
-        ]})
+        }})
 
         Connection.forward(downstream_conn, upstream_conn)
         Connection.forward(upstream_conn, downstream_conn)
@@ -128,10 +182,9 @@ defmodule Matchmaking.Proxy.Server do
       new_ports ++ acc
     end)
 
-    match_state = Parsing.MatchParser.match_state(state.match_parser)
     if removed_clients > 0 do
       removed_clients |> Enum.map(fn {{host, port}, _} ->
-        player_info = MatchState.get_player_info(match_state, {host, port})
+        player_info = MatchState.get_player_info(state.match_state, {host, port})
         player_name = Map.get(player_info, :username, "Unknown player")
 
         Logger.info("Recycling ports for #{Utility.host_to_ip(host)}:#{port} (#{player_name}) since they've been missing for #{recycle_port_ttl} minutes...")
@@ -142,7 +195,7 @@ defmodule Matchmaking.Proxy.Server do
       Enum.count(removed_clients) > 0 && Enum.count(remaining_clients) > 0 ->
         Logger.info("Remaining clients:")
         remaining_clients |> Enum.map(fn {{host, port}, _} ->
-          player_info = MatchState.get_player_info(match_state, {host, port})
+          player_info = MatchState.get_player_info(state.match_state, {host, port})
           player_name = Map.get(player_info, :username, "Unknown player")
           Logger.info("- #{Utility.host_to_ip(host)}:#{port} (#{player_name})")
         end)

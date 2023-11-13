@@ -1,10 +1,16 @@
 defmodule Mix.Tasks.Replay do
   use Mix.Task
-  alias Parsing.MatchParser
+  alias Parsing.{MatchParser, MatchState}
+  alias Logging.MatchLogger
   alias Matchmaking.Proxy.Utility
 
   def run([replay_filename | rest]) do
-    {:ok, match_parser} = GenServer.start_link(MatchParser, :ok)
+    {:ok, match_logger} = GenServer.start_link(MatchLogger, nil)
+    {:ok, match_state} = GenServer.start_link(MatchState, %{logger: match_logger})
+    {:ok, match_parser} = GenServer.start_link(MatchParser, %{
+      match_state: match_state,
+      logger: match_logger
+    })
 
     File.stream!(replay_filename)
     |> Stream.map(&String.trim/1)
@@ -36,6 +42,7 @@ defmodule Mix.Tasks.Replay do
     end)
     |> Stream.run
 
+    MatchLogger.wait(match_logger)
     MatchParser.wait(match_parser)
   end
 
