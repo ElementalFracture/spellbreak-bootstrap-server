@@ -6,6 +6,7 @@ defmodule Mix.Tasks.Compare do
       focus: [:string, :keep],
       focus_len: [:string, :keep],
       implied_equals: :boolean,
+      implied_nonequals: :boolean,
     ])
 
     focused_bytes = opts |> Keyword.get_values(:focus)
@@ -18,7 +19,13 @@ defmodule Mix.Tasks.Compare do
       case Regex.scan(~r/^(.+?): (.+?) (.+)$/, line) do
         [[_, something, byte_str, something_else]] ->
           bytes = byte_str |> String.graphemes() |> Enum.chunk_every(2)
-          data = bytes |> Enum.reduce(<<>>, fn byte_hex, acc -> acc <> Base.decode16!(Enum.join(byte_hex, "")) end)
+          data = bytes |> Enum.reduce(<<>>, fn byte_hex, acc ->
+
+            case Base.decode16(Enum.join(byte_hex, "")) do
+              {:ok, decoded} -> acc <> decoded
+              _ -> acc <> "[?]"
+            end
+          end)
 
           smallest_data_len = min(byte_size(prev_data), byte_size(data))
           overlapping_byte_range = if smallest_data_len > 0, do: (0..smallest_data_len-1), else: []
@@ -40,11 +47,11 @@ defmodule Mix.Tasks.Compare do
 
             cond do
               !is_focused -> "  "
+              prev_byte == curr_byte && !opts[:implied_equals] -> "=="
+              opts[:implied_nonequals] -> "  "
               prev_byte < curr_byte -> "++"
               prev_byte > curr_byte -> "--"
-
-              opts[:implied_equals] -> "  "
-              true -> "=="
+              true -> "  "
             end
           end)
 

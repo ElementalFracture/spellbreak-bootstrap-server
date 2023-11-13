@@ -74,8 +74,12 @@ defmodule Parsing.MatchParser do
     {state, :hello}
   end
 
-  defp process_packet_strip(conn, direction, pathway, <<_packet_count::binary-size(9), data::binary>>, state) do
-    process_packet(conn, direction, pathway, data, state)
+  defp process_packet_strip(conn, :to_upstream, pathway, <<_packet_count::binary-size(9), data::binary>>, state) do
+    process_packet(conn, :to_upstream, pathway, data, state)
+  end
+
+  defp process_packet_strip(conn, :to_downstream, pathway, <<_packet_count::binary-size(9), data::binary>>, state) do
+    process_packet(conn, :to_downstream, pathway, data, state)
   end
 
   defp process_packet_strip(conn, direction, pathway, data, state) do
@@ -86,12 +90,28 @@ defmodule Parsing.MatchParser do
     {state, "Heartbeat Ping??"}
   end
 
+  defp process_packet(_, :to_downstream, _, <<0x11, _::binary>>, state) do
+    {state, "Heartbeat 1?"}
+  end
+
+  defp process_packet(_, :to_downstream, _, <<0x12, _::binary>>, state) do
+    {state, "Heartbeat 2?"}
+  end
+
+  defp process_packet(_, :to_downstream, _, <<0x0A, _::binary>>, state) do
+    {state, "Pick up object?"}
+  end
+
   defp process_packet(_, :to_downstream, _, <<__header::binary-size(2), 0x18>>, state) do
     {state, "Handshake Pong??"}
   end
 
   defp process_packet(_, :to_upstream, _, <<_::binary-size(3), 0x18, _::binary>>, state) do
     {state, "Handshake"}
+  end
+
+  defp process_packet(_, :to_upstream, _, <<0x80, _::binary>>, state) do
+    {state, "Heartbeat: User State?"}
   end
 
   defp process_packet(_, :to_upstream, _, <<_::binary-size(3), 0x82, _::binary>>, state) do
@@ -199,10 +219,10 @@ defmodule Parsing.MatchParser do
 
           {state, "ServerCall?? #{Base.encode16(chunk_1)} (#{parse_server_call_str(chunk_1)}')"}
 
-        _ -> {state, "???"}
+        _ -> {state, "????"}
       end
     else
-      {state, "???"}
+      {state, "?????"}
     end
   end
 

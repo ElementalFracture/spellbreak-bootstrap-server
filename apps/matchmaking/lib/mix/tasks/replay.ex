@@ -23,6 +23,7 @@ defmodule Mix.Tasks.Replay do
     |> Stream.map(fn ({line, _index}) ->
       [[_, ts, server, direction, client, data, comment]] = Regex.scan(~r/^(.+?) - (.+?) ([\<\>]) ([0-9\.]+:[0-9]+):(.+) ---# (.+?) #---$/, line)
       data = String.replace(data, "--newline--", "\n")
+      data = data |> :binary.decode_unsigned(:little) |> :binary.encode_unsigned(:big)
 
       dir = if direction == "<", do: :to_upstream, else: :to_downstream
 

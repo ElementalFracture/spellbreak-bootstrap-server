@@ -1,0 +1,28 @@
+defmodule Mix.Tasks.Decode do
+  alias Matchmaking.Proxy.Utility
+  use Mix.Task
+  require Logger
+
+  def run(_) do
+    data = Base.decode16!("20000AFE2F008E0A040000006000AA0100005E8EC2DACA5E9AC2E0E65E98DEDCCEE6D0DEE85EA8D2E8D8CA7E9CC2DACA7AE0DED8F2DADEE4CCD2E27EA6E8E4CAC2DA7A607E86D8C2E6E69EECCAE4E4D2C8CA7A86D0C2E4C2C6E8CAE486D8C2E6E67484A0BE86D0C2E4C2C6E8CAE486D8C2E6E6BEA8CADAE0CAE6E87EA0CAE4D6E67A86D0C2E4C2C6E8CAE4A0CAE4D67484A0BEA0CAE4D6BEA6E0CAD8D8E6D8D2DCCECAE45886D0C2E4C2C6E8CAE4A0CAE4D67484A0BEA0CAE4D6BE82DAC4D2C8CAF0E8E4DEEAE65886D0C2E4C2C6E8CAE4A0CAE4D67484A0BEA0CAE4D6BE9AF2E6E8D2C6C2D800105C000000C6DEE4F25AEED2DCC8DEEEE65A6E84606060646A6C688C687062646C6C6C6A6E6E82708470726686826E868A6A000A0000009CAA98980006")
+    total_size = byte_size(data)
+
+    Utility.as_base_2(data) |> IO.inspect(label: "hmmm")
+
+    for i <- 0..total_size do
+      my_slice = data |> :binary.bin_to_list() |> Enum.reverse() |> :binary.list_to_bin() |> String.slice(i, total_size)
+
+      try do
+        case CBOR.decode(my_slice) do
+          {:ok, val, _} -> val  |> IO.inspect(label: "cbor")
+          _ -> :ok
+        end
+      rescue
+        _ -> :ok
+      end
+
+    end
+
+    Logger.info("Expanded!")
+  end
+end
