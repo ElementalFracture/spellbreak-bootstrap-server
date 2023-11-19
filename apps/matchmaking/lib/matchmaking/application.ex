@@ -7,7 +7,6 @@ defmodule Matchmaking.Application do
 
   @impl true
   def start(_type, _args) do
-
     servers = Application.fetch_env!(:matchmaking, :servers)
     outbound_port_start = Application.fetch_env!(:matchmaking, :outbound_port_start)
     outbound_port_end = Application.fetch_env!(:matchmaking, :outbound_port_end)
@@ -38,8 +37,14 @@ defmodule Matchmaking.Application do
     end)
 
     children = [
-      {DynamicSupervisor, strategy: :one_for_one, name: Matchmaking.Proxy.Connections},
+      {DynamicSupervisor, strategy: :one_for_one, name: Matchmaking.Proxy.Connections}
     ] ++ server_children
+
+    children = if Application.get_env(:matchmaking, :discord_token) != nil do
+      [{ChatBot.Bot, :ok}] ++ children
+    else
+      children
+    end
 
     # See https://hexdocs.pm/elixir/Supervisor.html
     # for other strategies and supported options
