@@ -183,7 +183,7 @@ defmodule ChatBot.Bot do
     author = data["author"]["global_name"]
 
     Logger.info("'#{author}' posted: #{data["content"]}")
-    respond_to_message(author, data["content"], %{}, state)
+    respond_to_message(author, data["content"], data, state)
   end
 
   # Received: Dispatch message
@@ -282,18 +282,70 @@ defmodule ChatBot.Bot do
 
 
   # Message handling
-  defp respond_to_message(author, message, metadata, state) do
+  defp respond_to_message(author, message, data, state) do
     is_admin = Enum.member?(discord_admins(), author)
 
     cond do
       is_admin && String.contains?(message, "I want to ban someone") ->
-        {:reply, {:binary, %{
-          "op" => @opcode_heartbeat,
-          "d" => state.sequence_number
-        } |> :erlang.term_to_binary()}, state}
+        {:ok, %{status: 200}} = Req.post("https://discord.com/api/v10/channels/#{data["channel_id"]}/messages", headers: %{Authorization: "Bot #{discord_token()}"}, json: %{
+          content: "Who should be banned and for how long?",
+          components: [
+            %{
+              type: 1,
+              components: [
+              %{
+                type: 3,
+                custom_id: "player_select",
+                options: [
+                  %{label: "polymorfiq", value: "polymorfiq"},
+                  %{label: "Doobs", value: "Doobs"},
+                  %{label: "CaptainKnife42", value: "CaptainKnife42"},
+                ],
+                placeholder: "Choose player(s)",
+                min_values: 1,
+                max_values: 3
+              }
+            ]
+          },
 
-      true -> {:ok, state}
+          %{
+            type: 1,
+            components: [
+              %{
+                type: 3,
+                custom_id: "duration_selected",
+                options: [
+                  %{label: "1 Hour", value: 1},
+                  %{label: "1 Day", value: 24},
+                  %{label: "1 Month", value: 24 * 30},
+                  %{label: "1 Year", value: 24 * 30 * 12},
+                  %{label: "Forever", value: 24 * 30 * 12 * 100},
+                ],
+                placeholder: "Choose a duration",
+                min_values: 1,
+                max_values: 1
+              }
+            ]
+          },
+
+          %{
+            type: 1,
+            components: [
+              %{
+                type: 2,
+                label: "Start Ban",
+                style: 1,
+                custom_id: "start_ban"
+              }
+            ]
+          }
+        ]
+        })
+
+      true -> :ok
     end
+
+    {:ok, state}
   end
 
 
