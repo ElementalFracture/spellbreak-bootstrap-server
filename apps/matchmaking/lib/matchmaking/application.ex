@@ -4,6 +4,7 @@ defmodule Matchmaking.Application do
   @moduledoc false
   use Application
   alias Matchmaking.Proxy
+  alias Matchmaking.Proxy.BanHandler
 
   @impl true
   def start(_type, _args) do
@@ -37,7 +38,8 @@ defmodule Matchmaking.Application do
     end)
 
     children = [
-      {DynamicSupervisor, strategy: :one_for_one, name: Matchmaking.Proxy.Connections}
+      {DynamicSupervisor, strategy: :one_for_one, name: Matchmaking.Proxy.Connections},
+      {BanHandler, %{ban_file: Application.get_env(:matchmaking, :ban_file)}}
     ] ++ server_children
 
     children = if Application.get_env(:matchmaking, :discord_token) != nil do

@@ -1,9 +1,11 @@
 defmodule Parsing.MatchState do
   use GenServer
-  alias Logging.{MatchLogger, MatchRecorder}
   require Logger
+  alias Logging.{MatchLogger, MatchRecorder}
+  alias Matchmaking.Proxy.Utility
 
   @log_regex ~r/.*\/g3-([0-9]+)\.log$/
+  @gproc_prop :matchmaking_match_state
 
   def start_link(args, opts \\ []) do
     GenServer.start_link(__MODULE__, args, opts)
@@ -23,6 +25,8 @@ defmodule Parsing.MatchState do
 
   @impl true
   def handle_continue(:setup_watchers, state) do
+    :gproc.reg({:p, :l, @gproc_prop})
+
     if state.log_dir do
       {:ok, pid} = FileSystem.start_link(dirs: [state.log_dir])
       FileSystem.subscribe(pid)
@@ -39,6 +43,10 @@ defmodule Parsing.MatchState do
     GenServer.call(pid, {:get_player_info, conn})
   end
 
+  def players_and_ips(pid) do
+    GenServer.call(pid, :players_and_ips)
+  end
+
   @impl true
   def handle_cast({:set_player_info, conn, key, value}, state) do
     players = state.players
@@ -50,6 +58,17 @@ defmodule Parsing.MatchState do
     end
 
     {:noreply, %{state | players: players}}
+  end
+
+  @impl true
+  def handle_call(:players_and_ips, _, state) do
+    pairs = state.players
+    |> Enum.map(fn
+      {{{_, _, _, _} = host, _}, player} -> {Utility.host_to_ip(host), player}
+      _ -> nil
+    end)
+
+    {:reply, pairs, state}
   end
 
   @impl true
@@ -78,4 +97,6 @@ defmodule Parsing.MatchState do
   def handle_info({:file_event, _watcher_pid, :stop}, state) do
     {:noreply, state}
   end
+
+  def gproc_prop, do: @gproc_prop
 end

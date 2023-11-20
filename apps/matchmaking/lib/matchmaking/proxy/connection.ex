@@ -24,6 +24,8 @@ defmodule Matchmaking.Proxy.Connection do
     dest_host,
     dest_port
   }) do
+    :gproc.reg({:p, :l, :proxy_connection})
+
     {:ok, socket} = if direction == :to_downstream do
       {:ok, downstream_socket}
     else
@@ -47,6 +49,8 @@ defmodule Matchmaking.Proxy.Connection do
     GenServer.cast(pid, {:send, ts, source_host, source_port, data})
   end
 
+  def close_if_host(pid, host), do: GenServer.cast(pid, {:close_if_host, host})
+
   def close(pid) do
     GenServer.cast(pid, :close)
   end
@@ -67,6 +71,15 @@ defmodule Matchmaking.Proxy.Connection do
   @impl true
   def handle_cast({:set_player_info, key, value}, state) do
     {:noreply, put_in(state, [:player_info, key], value)}
+  end
+
+  @impl true
+  def handle_cast({:close_if_host, host}, state) do
+    if host == state.dest_host do
+      GenServer.cast(self(), :close)
+    end
+
+    {:noreply, state}
   end
 
   @impl true

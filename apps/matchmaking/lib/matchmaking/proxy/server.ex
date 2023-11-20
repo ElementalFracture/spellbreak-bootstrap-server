@@ -1,4 +1,5 @@
 defmodule Matchmaking.Proxy.Server do
+  alias Matchmaking.Proxy.BanHandler
   alias Matchmaking.Proxy.{Connection, Connections, Utility}
   alias Parsing.{MatchParser, MatchState}
   alias Logging.{MatchLogger, MatchRecorder}
@@ -29,10 +30,10 @@ defmodule Matchmaking.Proxy.Server do
     {host, host_port} = opts.destination
     Logger.info("Proxy #{server_name} started, pointing 0.0.0.0:#{port} -> #{IP.to_string(host)}:#{host_port}")
 
-    match_logger_id = "#{opts.name}_MatchLogger" |> String.to_atom()
-    match_state_id = "#{opts.name}_MatchState" |> String.to_atom()
-    match_recorder_id = "#{opts.name}_MatchRecorder" |> String.to_atom()
-    match_parser_id = "#{opts.name}_MatchParser" |> String.to_atom()
+    match_logger_id = via_tuple({:match_logger, opts.name})
+    match_state_id = via_tuple({:match_state, opts.name})
+    match_recorder_id = via_tuple({:match_recorder, opts.name})
+    match_parser_id = via_tuple({:match_parser, opts.name})
     children = [
       %{
         id: MatchLogger,
@@ -65,7 +66,7 @@ defmodule Matchmaking.Proxy.Server do
       }
     ]
 
-    supervisor_id = "#{opts.name}_Supervisor" |> String.to_atom()
+    supervisor_id = via_tuple({:match_supervisor, opts.name})
     {:ok, supervisor} = Supervisor.start_link(children, [strategy: :one_for_one, name: supervisor_id])
 
     schedule_cleanup()
@@ -87,14 +88,20 @@ defmodule Matchmaking.Proxy.Server do
   @impl true
   def handle_info({:udp, _socket, host, port, data}, state) do
     client_id = {host, port}
-    {client, state} = case {Map.get(state.clients, client_id), state} do
-      {nil, %{available_outbounds: []}} ->
+    existing_connection = Map.get(state.clients, client_id)
+
+    {client, state} = cond do
+      existing_connection == nil && Enum.empty?(state.available_outbound) ->
         # We have no available outbound ports
         Logger.warning("New client (#{Utility.host_to_ip(host)}) tried to connect when there are no outbound ports available. Ignoring")
+        {nil, state}
 
-        {:noreply, state}
+      existing_connection == nil && BanHandler.is_banned?(host) ->
+        # Ignore the connection request. This person has been banned
+        Logger.warning("Attempt to connect from banned host '#{Utility.host_to_ip(host)}'. Ignoring...")
+        {nil, state}
 
-      {nil, _} ->
+      existing_connection == nil ->
         # We have a new client and also available outbound ports
         [external_upstream_port, external_downstream_port] = Enum.take_random(state.available_outbound, 2)
         available_outbound = state.available_outbound |> Enum.reject(&(Enum.member?([external_upstream_port, external_downstream_port], &1)))
@@ -137,15 +144,17 @@ defmodule Matchmaking.Proxy.Server do
           clients: clients
         }}
 
-      {client, _} ->
+      true ->
         # We have seen this client before and they have an assigned outbound port
-        {conns, _} = client
+        {conns, _} = existing_connection
 
-        {client, put_in(state, [:clients, client_id], {conns, DateTime.utc_now()})}
+        {existing_connection, put_in(state, [:clients, client_id], {conns, DateTime.utc_now()})}
     end
 
-    {[_, {_, upstream_conn}], _} = client
-    Connection.send(upstream_conn, {host, port}, data)
+    if client do
+      {[_, {_, upstream_conn}], _} = client
+      Connection.send(upstream_conn, {host, port}, data)
+    end
 
     {:noreply, state}
   end
@@ -213,4 +222,6 @@ defmodule Matchmaking.Proxy.Server do
     recycle_port_ttl = Application.fetch_env!(:matchmaking, :recycle_ports_minutes)
     Process.send_after(self(), :cleanup, recycle_port_ttl * 60 * 1000)
   end
+
+  defp via_tuple(name_tuple), do: {:via, :gproc, {:n, :l, name_tuple}}
 end

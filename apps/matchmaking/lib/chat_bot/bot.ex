@@ -2,6 +2,14 @@ defmodule ChatBot.Bot do
   use WebSockex
   import Bitwise
   require Logger
+  alias Matchmaking.Proxy.BanHandler
+  alias ChatBot.Messages
+
+  @app_id 1169472049174024202
+  @admin_guild_ids [
+    1169491952543223870,
+    1023813169124221009
+  ]
 
   # https://discord.com/developers/docs/topics/opcodes-and-status-codes
   @opcode_dispatch              0
@@ -91,6 +99,31 @@ defmodule ChatBot.Bot do
     @intent_direct_message_reactions
   ] |> Enum.sum()
 
+  @app_command_chat_input                     1
+  @app_command_user                           2
+  @app_command_message                        3
+
+  @interact_resp_pong                         1
+  @interact_resp_channel_msg                  4
+  @interact_resp_deferred_channel_msg         5
+  @interact_resp_deferred_update_msg          6
+  @interact_resp_update_msg                   7
+  @interact_resp_app_cmd_autocomplete_result  8
+  @interact_resp_modal                        9
+  @interact_resp_premium_required             10
+
+  @msg_flag_crossposted                       1 <<< 0
+  @msg_flag_is_crosspost                      1 <<< 1
+  @msg_flag_suppress_embeds                   1 <<< 2
+  @msg_flag_source_msg_deleted                1 <<< 3
+  @msg_flag_urgent                            1 <<< 4
+  @msg_flag_has_thread                        1 <<< 5
+  @msg_flag_ephemeral                         1 <<< 6
+  @msg_flag_loading                           1 <<< 7
+  @msg_flag_failed_to_mention_roles_thread    1 <<< 8
+  @msg_flag_suppress_notifs                   1 <<< 12
+  @msg_flag_is_voice_message                  1 <<< 13
+
   def start_link(:ok, opts \\ []) do
     websocket_url = Req.get!("https://discordapp.com/api/gateway").body["url"]
     {:ok, client} = WebSockex.start_link("#{websocket_url}/?v=10&encoding=etf", __MODULE__, %{
@@ -99,7 +132,8 @@ defmodule ChatBot.Bot do
       resume_url: nil,
       session_id: nil,
       last_heartbeat: nil,
-      last_heartbeat_ack: nil
+      last_heartbeat_ack: nil,
+      interaction_states: %{}
     }, opts)
 
     {:ok, client}
@@ -117,7 +151,11 @@ defmodule ChatBot.Bot do
     end
 
 
-    {:ok, %{state | last_heartbeat: nil, last_heartbeat_ack: nil, sequence_number: nil}}
+    {:ok, %{state |
+      last_heartbeat: nil,
+      last_heartbeat_ack: nil,
+      sequence_number: nil
+    }}
   end
 
   @impl true
@@ -125,7 +163,7 @@ defmodule ChatBot.Bot do
     frame = :erlang.binary_to_term(msg)
 
     op = @opcodes
-    |> Enum.find(fn {key, val} -> val == frame.op end)
+    |> Enum.find(fn {_, val} -> val == frame.op end)
     |> elem(0)
 
     case process_frame(op, frame.t, frame.d, frame.s, state) do
@@ -155,7 +193,7 @@ defmodule ChatBot.Bot do
   end
 
   # Received: Hello message
-  defp process_frame(:hello, _, data, seq_num, state) do
+  defp process_frame(:hello, _, data, _, state) do
     Logger.debug("Received Hello message (Heartbeat interval: #{data.heartbeat_interval}, data: #{inspect(data)})")
 
     jitter = :rand.uniform()
@@ -165,15 +203,17 @@ defmodule ChatBot.Bot do
   end
 
   # Received: Dispatch message
-  defp process_frame(:dispatch, :READY, data, seq_num, state) do
+  defp process_frame(:dispatch, :READY, data, _, state) do
     Logger.info("Discord Bot '#{data.user.username}' is READY")
+    create_global_app_commands()
 
     {:ok, %{state |
       resume_url: data.resume_gateway_url,
       session_id: data.session_id
     }}
   end
-  defp process_frame(:dispatch, :RESUMED, data, seq_num, state) do
+
+  defp process_frame(:dispatch, :RESUMED, _, _, state) do
     Logger.info("Discord Bot successfully resumed and is READY")
 
     {:ok, state}
@@ -183,7 +223,91 @@ defmodule ChatBot.Bot do
     author = data["author"]["global_name"]
 
     Logger.info("'#{author}' posted: #{data["content"]}")
-    respond_to_message(author, data["content"], data, state)
+    {:ok, state}
+  end
+
+  defp process_frame(:dispatch, :INTERACTION_CREATE, interaction, _, state) do
+    user = interaction["member"]["user"]["global_name"]
+    in_response_to = interaction["message"]["interaction"]["name"]
+    action_name = interaction["data"]["name"] || "followup"
+    guild_id = interaction["guild_id"]
+
+    msg_interact_id = interaction["message"]["interaction"]["id"]
+    is_admin = Enum.member?(@admin_guild_ids, guild_id)
+
+    Logger.debug("Responding to '#{action_name} - #{in_response_to}' for '#{user}' in guild '#{guild_id}'")
+
+    case {is_admin, in_response_to, interaction["data"]} do
+      {true, nil, %{"name" => "spellbreak-ban"}} ->
+        respond_to_interaction(interaction, %{
+          type: @interact_resp_channel_msg,
+          data: Messages.ban_message() |> Map.put(:flags, @msg_flag_ephemeral)
+        })
+        {:ok, state}
+
+      {true, "spellbreak-ban", %{"custom_id" => "start_ban"}} ->
+        form_state = Map.get(state.interaction_states, msg_interact_id, %{})
+
+        case form_state do
+          %{"duration_selected" => [duration], "player_select" => player_ips} ->
+            expires_at = duration
+            |> String.to_integer()
+            |> then(&(DateTime.add(DateTime.utc_now(), &1, :hour)))
+
+            banned_users = player_ips
+            |> Enum.map(&(String.split(&1, "\t")))
+            |> Enum.map(fn [username, ip] ->
+              BanHandler.ban(username, ip, user, expires_at)
+
+              username
+            end)
+
+            respond_to_interaction(interaction, %{
+              type: @interact_resp_update_msg,
+              data: Messages.did_ban_message(banned_users, duration)
+            })
+
+          _ -> Logger.info("'Start ban' pressed when form not filled out: #{inspect(form_state)}")
+        end
+
+        {:ok, state}
+
+      {true, nil, %{"name" => "spellbreak-unban"}} ->
+        respond_to_interaction(interaction, %{
+          type: @interact_resp_channel_msg,
+          data: Messages.unban_message() |> Map.put(:flags, @msg_flag_ephemeral)
+        })
+
+        {:ok, state}
+
+      {true, "spellbreak-unban", %{"custom_id" => "start_unban"}} ->
+        form_state = Map.get(state.interaction_states, msg_interact_id, %{})
+
+        case form_state do
+          %{"player_select" => player_usernames} ->
+            player_usernames
+            |> Enum.each(&(BanHandler.unban(&1, user)))
+
+            respond_to_interaction(interaction, %{
+              type: @interact_resp_update_msg,
+              data: Messages.did_unban_message(player_usernames)
+            })
+
+          _ -> Logger.info("'Start unban' pressed when form not filled out: #{inspect(form_state)}")
+        end
+
+        {:ok, state}
+
+      {true, _, %{"custom_id" => input_id, "values" => values}} ->
+        interact_id = interaction["message"]["interaction"]["id"]
+        respond_to_interaction(interaction, %{type: @interact_resp_deferred_update_msg})
+
+        {:ok, put_in(state, [:interaction_states, Access.key(interact_id, %{}), input_id], values)}
+
+      _ ->
+        Logger.debug("Unknown interaction received (#{action_name}): #{inspect(interaction)}")
+        {:ok, state}
+    end
   end
 
   # Received: Dispatch message
@@ -280,75 +404,36 @@ defmodule ChatBot.Bot do
     exit(:normal)
   end
 
+  defp create_global_app_commands do
+    Logger.info("Registering global Application Commands...")
 
-  # Message handling
-  defp respond_to_message(author, message, data, state) do
-    is_admin = Enum.member?(discord_admins(), author)
+    {:ok, %{status: 200}} = Req.post("https://discord.com/api/v10/applications/#{@app_id}/commands", headers: http_auth_headers(), json: %{
+      name: "spellbreak-ban",
+      type: @app_command_chat_input,
+      description: "Ban someone who is present in an active Spellbreak game"
+    })
 
-    cond do
-      is_admin && String.contains?(message, "I want to ban someone") ->
-        {:ok, %{status: 200}} = Req.post("https://discord.com/api/v10/channels/#{data["channel_id"]}/messages", headers: %{Authorization: "Bot #{discord_token()}"}, json: %{
-          content: "Who should be banned and for how long?",
-          components: [
-            %{
-              type: 1,
-              components: [
-              %{
-                type: 3,
-                custom_id: "player_select",
-                options: [
-                  %{label: "polymorfiq", value: "polymorfiq"},
-                  %{label: "Doobs", value: "Doobs"},
-                  %{label: "CaptainKnife42", value: "CaptainKnife42"},
-                ],
-                placeholder: "Choose player(s)",
-                min_values: 1,
-                max_values: 3
-              }
-            ]
-          },
-
-          %{
-            type: 1,
-            components: [
-              %{
-                type: 3,
-                custom_id: "duration_selected",
-                options: [
-                  %{label: "1 Hour", value: 1},
-                  %{label: "1 Day", value: 24},
-                  %{label: "1 Month", value: 24 * 30},
-                  %{label: "1 Year", value: 24 * 30 * 12},
-                  %{label: "Forever", value: 24 * 30 * 12 * 100},
-                ],
-                placeholder: "Choose a duration",
-                min_values: 1,
-                max_values: 1
-              }
-            ]
-          },
-
-          %{
-            type: 1,
-            components: [
-              %{
-                type: 2,
-                label: "Start Ban",
-                style: 1,
-                custom_id: "start_ban"
-              }
-            ]
-          }
-        ]
-        })
-
-      true -> :ok
-    end
-
-    {:ok, state}
+    {:ok, %{status: 200}} = Req.post("https://discord.com/api/v10/applications/#{@app_id}/commands", headers: http_auth_headers(), json: %{
+      name: "spellbreak-unban",
+      type: @app_command_chat_input,
+      description: "Unban someone from Spellbreak games"
+    })
   end
 
+  defp send_message_ban_prompt(from_data) do
+    {:ok, %{status: 200}} = Req.post("https://discord.com/api/v10/channels/#{from_data["channel_id"]}/messages", [
+      headers: http_auth_headers(),
+      json: Messages.ban_message()
+    ])
+  end
 
+  defp respond_to_interaction(interaction, response) do
+    {:ok, %{status: 204}} = Req.post("https://discord.com/api/v10/interactions/#{interaction["id"]}/#{interaction["token"]}/callback", [
+      headers: http_auth_headers(),
+      json: response
+    ])
+  end
+
+  defp http_auth_headers, do: %{Authorization: "Bot #{discord_token()}"}
   defp discord_token, do: Application.fetch_env!(:matchmaking, :discord_token)
-  defp discord_admins, do: Application.fetch_env!(:matchmaking, :discord_admins)
 end
