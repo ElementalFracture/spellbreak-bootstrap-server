@@ -82,7 +82,7 @@ defmodule Matchmaking.Proxy.BanHandler do
     Logger.info("Unbanning #{username} at the request of #{unbanned_by}")
 
     bans = state.bans |> Enum.map(fn ban ->
-      if ban.username == username && DateTime.before?(ts, ban.ban_expires_at) do
+      if ban.username == username && DateTime.diff(ts, ban.ban_expires_at, :second) < 0 do
         %{ban | ban_expires_at: ts}
       else
         ban
