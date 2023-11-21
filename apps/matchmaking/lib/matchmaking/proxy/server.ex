@@ -1,6 +1,6 @@
 defmodule Matchmaking.Proxy.Server do
   alias Matchmaking.Proxy.BanHandler
-  alias Matchmaking.Proxy.{Connection, Connections, Utility}
+  alias Matchmaking.Proxy.{Connection, Connections, MatchManager, Utility}
   alias Parsing.{MatchParser, MatchState}
   alias Logging.{MatchLogger, MatchRecorder}
   use GenServer
@@ -34,6 +34,7 @@ defmodule Matchmaking.Proxy.Server do
     match_state_id = via_tuple({:match_state, opts.name})
     match_recorder_id = via_tuple({:match_recorder, opts.name})
     match_parser_id = via_tuple({:match_parser, opts.name})
+    match_manager_id = via_tuple({:match_manager, opts.name})
     children = [
       %{
         id: MatchLogger,
@@ -63,6 +64,12 @@ defmodule Matchmaking.Proxy.Server do
           match_state: match_state_id,
           recorder: match_recorder_id
         }, [name: match_parser_id]]}
+      },
+      %{
+        id: MatchManager,
+        start: {MatchManager, :start_link, [%{
+          server_name: server_name,
+        }, [name: match_manager_id]]}
       }
     ]
 

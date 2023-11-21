@@ -1,4 +1,5 @@
 defmodule ChatBot.Messages do
+  alias Matchmaking.Proxy.MatchManager
   alias Matchmaking.Proxy.BanHandler
   alias Parsing.MatchState
 
@@ -113,6 +114,53 @@ defmodule ChatBot.Messages do
   def did_unban_message(usernames) do
     %{
       content: "Unbanned #{Enum.join(usernames, " + ")}!",
+      components: []
+    }
+  end
+
+
+  def server_reset_message do
+    match_managers = :gproc.lookup_pids({:p, :l, MatchManager.gproc_prop})
+
+    server_names = match_managers
+    |> Enum.map(&MatchManager.server_name/1)
+
+    %{
+      content: "Which servers should be restarted?",
+      components: [
+        %{
+          type: 1,
+          components: [
+          %{
+            type: 3,
+            custom_id: "server_select",
+            options: server_names |> Enum.map(fn server_name ->
+              %{label: server_name, value: server_name}
+            end),
+            placeholder: "Choose server(s)",
+            min_values: min(Enum.count(server_names), 1),
+            max_values: Enum.count(server_names)
+          }
+        ]
+      },
+      %{
+        type: 1,
+        components: [
+          %{
+            type: 2,
+            label: "Reset Servers",
+            style: 1,
+            custom_id: "reset_servers"
+          }
+        ]
+      }
+    ]
+    }
+  end
+
+  def did_server_reset_message(servers) do
+    %{
+      content: "Resetting #{Enum.join(servers, " + ")}!",
       components: []
     }
   end

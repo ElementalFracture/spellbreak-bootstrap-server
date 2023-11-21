@@ -2,6 +2,7 @@ defmodule ChatBot.Bot do
   use WebSockex
   import Bitwise
   require Logger
+  alias Matchmaking.Proxy.MatchManager
   alias Matchmaking.Proxy.BanHandler
   alias ChatBot.Messages
 
@@ -238,6 +239,33 @@ defmodule ChatBot.Bot do
     Logger.debug("Responding to '#{action_name} - #{in_response_to}' for '#{user}' in guild '#{guild_id}'")
 
     case {is_admin, in_response_to, interaction["data"]} do
+      {true, nil, %{"name" => "spellbreak-reset"}} ->
+        respond_to_interaction(interaction, %{
+          type: @interact_resp_channel_msg,
+          data: Messages.server_reset_message() |> Map.put(:flags, @msg_flag_ephemeral)
+        })
+        {:ok, state}
+
+      {true, "spellbreak-reset", %{"custom_id" => "reset_servers"}} ->
+        form_state = Map.get(state.interaction_states, msg_interact_id, %{})
+        servers = Map.get(form_state, "server_select", [])
+        match_managers = :gproc.lookup_pids({:p, :l, MatchManager.gproc_prop})
+
+        match_managers
+        |> Enum.each(fn manager ->
+          server_name = MatchManager.server_name(manager)
+
+          if Enum.member?(servers, server_name) do
+            MatchManager.reset_server(manager)
+          end
+        end)
+
+        respond_to_interaction(interaction, %{
+          type: @interact_resp_update_msg,
+          data: Messages.did_server_reset_message(servers) |> Map.put(:flags, @msg_flag_ephemeral)
+        })
+        {:ok, state}
+
       {true, nil, %{"name" => "spellbreak-ban"}} ->
         respond_to_interaction(interaction, %{
           type: @interact_resp_channel_msg,
@@ -413,10 +441,20 @@ defmodule ChatBot.Bot do
       description: "Ban someone who is present in an active Spellbreak game"
     })
 
+    Process.sleep(1000)
+
     {:ok, %{status: 200}} = Req.post("https://discord.com/api/v10/applications/#{@app_id}/commands", headers: http_auth_headers(), json: %{
       name: "spellbreak-unban",
       type: @app_command_chat_input,
       description: "Unban someone from Spellbreak games"
+    })
+
+    Process.sleep(1000)
+
+    {:ok, %{status: 200}} = Req.post("https://discord.com/api/v10/applications/#{@app_id}/commands", headers: http_auth_headers(), json: %{
+      name: "spellbreak-reset",
+      type: @app_command_chat_input,
+      description: "Reset a spellbreak server"
     })
   end
 
