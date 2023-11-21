@@ -280,7 +280,7 @@ defmodule ChatBot.Bot do
           %{"duration_selected" => [duration], "player_select" => player_ips} ->
             expires_at = duration
             |> String.to_integer()
-            |> then(&(DateTime.add(DateTime.utc_now(), &1, :hour)))
+            |> then(&(DateTime.add(DateTime.utc_now(), &1 * 60 * 60, :second)))
 
             banned_users = player_ips
             |> Enum.map(&(String.split(&1, "\t")))
