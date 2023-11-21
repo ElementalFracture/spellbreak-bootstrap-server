@@ -47,7 +47,9 @@ defmodule Matchmaking.Proxy.BanHandler do
   def handle_call(:all_bans, _, state) do
     now = DateTime.utc_now()
     active_bans = state.bans
-    |> Enum.filter(&(DateTime.before?(now, &1.ban_expires_at)))
+    |> Enum.filter(fn ban ->
+      DateTime.diff(now, ban.ban_expires_at, :second) < 0
+    end)
 
     {:reply, active_bans, state}
   end
@@ -94,7 +96,7 @@ defmodule Matchmaking.Proxy.BanHandler do
   def handle_call({:is_banned?, host}, _, state) do
     now = DateTime.utc_now()
     ban_record = Enum.find(state.bans, fn ban ->
-      ban.ip == host && DateTime.before?(now, ban.ban_expires_at)
+      ban.ip == host && DateTime.diff(now, ban.ban_expires_at, :second) < 0
     end)
 
     {:reply, ban_record != nil, state}
