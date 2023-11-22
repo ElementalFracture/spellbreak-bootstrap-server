@@ -6,11 +6,14 @@ defmodule ChatBot.Bot do
   alias Matchmaking.Proxy.BanHandler
   alias ChatBot.Messages
 
-  @app_id 1169472049174024202
   @admin_guild_ids [
     1169491952543223870,
     1023813169124221009
   ]
+
+  @slash_command_ban          "sbcban"
+  @slash_command_unban        "sbcunban"
+  @slash_command_restart      "sbcrestart"
 
   # https://discord.com/developers/docs/topics/opcodes-and-status-codes
   @opcode_dispatch              0
@@ -239,14 +242,14 @@ defmodule ChatBot.Bot do
     Logger.debug("Responding to '#{action_name} - #{in_response_to}' for '#{user}' in guild '#{guild_id}'")
 
     case {is_admin, in_response_to, interaction["data"]} do
-      {true, nil, %{"name" => "spellbreak-reset"}} ->
+      {true, nil, %{"name" => @slash_command_restart}} ->
         respond_to_interaction(interaction, %{
           type: @interact_resp_channel_msg,
           data: Messages.server_reset_message() |> Map.put(:flags, @msg_flag_ephemeral)
         })
         {:ok, state}
 
-      {true, "spellbreak-reset", %{"custom_id" => "reset_servers"}} ->
+      {true, @slash_command_restart, %{"custom_id" => "reset_servers"}} ->
         form_state = Map.get(state.interaction_states, msg_interact_id, %{})
         servers = Map.get(form_state, "server_select", [])
         match_managers = :gproc.lookup_pids({:p, :l, MatchManager.gproc_prop})
@@ -266,14 +269,14 @@ defmodule ChatBot.Bot do
         })
         {:ok, state}
 
-      {true, nil, %{"name" => "spellbreak-ban"}} ->
+      {true, nil, %{"name" => @slash_command_ban}} ->
         respond_to_interaction(interaction, %{
           type: @interact_resp_channel_msg,
           data: Messages.ban_message() |> Map.put(:flags, @msg_flag_ephemeral)
         })
         {:ok, state}
 
-      {true, "spellbreak-ban", %{"custom_id" => "start_ban"}} ->
+      {true, @slash_command_ban, %{"custom_id" => "start_ban"}} ->
         form_state = Map.get(state.interaction_states, msg_interact_id, %{})
 
         case form_state do
@@ -300,7 +303,7 @@ defmodule ChatBot.Bot do
 
         {:ok, state}
 
-      {true, nil, %{"name" => "spellbreak-unban"}} ->
+      {true, nil, %{"name" => @slash_command_unban}} ->
         respond_to_interaction(interaction, %{
           type: @interact_resp_channel_msg,
           data: Messages.unban_message() |> Map.put(:flags, @msg_flag_ephemeral)
@@ -308,7 +311,7 @@ defmodule ChatBot.Bot do
 
         {:ok, state}
 
-      {true, "spellbreak-unban", %{"custom_id" => "start_unban"}} ->
+      {true, @slash_command_unban, %{"custom_id" => "start_unban"}} ->
         form_state = Map.get(state.interaction_states, msg_interact_id, %{})
 
         case form_state do
@@ -435,24 +438,24 @@ defmodule ChatBot.Bot do
   defp create_global_app_commands do
     Logger.info("Registering global Application Commands...")
 
-    {:ok, %{status: 200}} = Req.post("https://discord.com/api/v10/applications/#{@app_id}/commands", headers: http_auth_headers(), json: %{
-      name: "spellbreak-ban",
+    {:ok, %{status: 200}} = Req.post("https://discord.com/api/v10/applications/#{discord_app_id()}/commands", headers: http_auth_headers(), json: %{
+      name: @slash_command_ban,
       type: @app_command_chat_input,
       description: "Ban someone who is present in an active Spellbreak game"
     })
 
     Process.sleep(1000)
 
-    {:ok, %{status: 200}} = Req.post("https://discord.com/api/v10/applications/#{@app_id}/commands", headers: http_auth_headers(), json: %{
-      name: "spellbreak-unban",
+    {:ok, %{status: 200}} = Req.post("https://discord.com/api/v10/applications/#{discord_app_id()}/commands", headers: http_auth_headers(), json: %{
+      name: @slash_command_unban,
       type: @app_command_chat_input,
       description: "Unban someone from Spellbreak games"
     })
 
     Process.sleep(1000)
 
-    {:ok, %{status: 200}} = Req.post("https://discord.com/api/v10/applications/#{@app_id}/commands", headers: http_auth_headers(), json: %{
-      name: "spellbreak-reset",
+    {:ok, %{status: 200}} = Req.post("https://discord.com/api/v10/applications/#{discord_app_id()}/commands", headers: http_auth_headers(), json: %{
+      name: @slash_command_restart,
       type: @app_command_chat_input,
       description: "Reset a spellbreak server"
     })
@@ -473,5 +476,6 @@ defmodule ChatBot.Bot do
   end
 
   defp http_auth_headers, do: %{Authorization: "Bot #{discord_token()}"}
+  defp discord_app_id, do: Application.fetch_env!(:matchmaking, :discord_app_id)
   defp discord_token, do: Application.fetch_env!(:matchmaking, :discord_token)
 end
