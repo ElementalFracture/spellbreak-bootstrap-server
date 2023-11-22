@@ -214,7 +214,7 @@ defmodule ChatBot.Bot do
 
     # create_global_app_commands(self())
 
-    Process.send_after(self(), :update_status, 5 * 60_000)
+    Process.send_after(self(), :update_status, 2 * 60_000)
 
     {:ok, %{state |
       resume_url: data.resume_gateway_url,
@@ -452,7 +452,7 @@ defmodule ChatBot.Bot do
       "activities" => Activities.servers_online(),
     })
 
-    Process.send_after(self(), :update_status, 5 * 60_000)
+    Process.send_after(self(), :update_status, 2 * 60_000)
 
     {:ok, state}
   end
