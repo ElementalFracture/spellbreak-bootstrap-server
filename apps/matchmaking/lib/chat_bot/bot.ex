@@ -259,20 +259,30 @@ defmodule ChatBot.Bot do
         servers = Map.get(form_state, "server_select", [])
         match_managers = :gproc.lookup_pids({:p, :l, MatchManager.gproc_prop})
 
-        respond_to_interaction(interaction, %{type: @interact_resp_deferred_update_msg})
-
-        match_managers
-        |> Enum.each(fn manager ->
+        reset_succeeded = match_managers
+        |> Enum.reduce(true, fn manager, curr_state ->
           server_name = MatchManager.server_name(manager)
           if Enum.member?(servers, "#{server_name}") do
-            MatchManager.reset_server(manager)
+            case MatchManager.reset_server(manager) do
+              :ok -> curr_state
+              {:error, _} -> false
+            end
+          else
+            curr_state
           end
         end)
 
-        respond_to_interaction(interaction, %{
-          type: @interact_resp_update_msg,
-          data: Messages.did_server_reset_message(servers) |> Map.put(:flags, @msg_flag_ephemeral)
-        })
+        if reset_succeeded do
+          respond_to_interaction(interaction, %{
+            type: @interact_resp_update_msg,
+            data: Messages.did_server_reset_message(servers) |> Map.put(:flags, @msg_flag_ephemeral)
+          })
+        else
+          respond_to_interaction(interaction, %{
+            type: @interact_resp_update_msg,
+            data: Messages.failed_server_reset_message(servers) |> Map.put(:flags, @msg_flag_ephemeral)
+          })
+        end
         {:ok, state}
 
       {true, nil, %{"name" => @slash_command_ban}} ->

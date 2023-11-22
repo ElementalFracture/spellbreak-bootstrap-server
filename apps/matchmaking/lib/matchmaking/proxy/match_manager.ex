@@ -40,15 +40,25 @@ defmodule Matchmaking.Proxy.MatchManager do
 
   @impl true
   def handle_call(:reset_server, _, state) do
-    # :gen_tcp.send(socket, line)
-
     Logger.info("Sending reset signal: #{inspect(state)}")
-    {:ok, socket} = :gen_tcp.connect(state.server_host, state.server_manager_port, [active: false, mode: :binary, packet: :line, send_timeout: 20_000])
-    :ok = :gen_tcp.send(socket, "CMD_REFRESH")
-    :ok = :gen_tcp.close(socket)
+
+    try do
+      {:ok, socket} = :gen_tcp.connect(state.server_host, state.server_manager_port, [
+        active: false,
+        mode: :binary,
+        packet: :line,
+        send_timeout: 2_000,
+        send_timeout_close: true
+      ], 2_000)
+      :ok = :gen_tcp.send(socket, "CMD_REFRESH")
+      :gen_tcp.close(socket)
+
+      {:reply, :ok, state}
+    rescue
+      err -> {:reply, {:error, err}, state}
+    end
 
 
-    {:reply, :ok, state}
   end
 
   def gproc_prop, do: @gproc_prop

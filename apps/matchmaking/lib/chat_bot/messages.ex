@@ -165,4 +165,11 @@ defmodule ChatBot.Messages do
       components: []
     }
   end
+
+  def failed_server_reset_message(servers) do
+    %{
+      content: "Failed to reset #{Enum.join(servers, " + ")}...",
+      components: []
+    }
+  end
 end
