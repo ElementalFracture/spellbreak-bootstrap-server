@@ -15,6 +15,7 @@ defmodule ChatBot.Bot do
   @slash_command_ban          "sbcban"
   @slash_command_unban        "sbcunban"
   @slash_command_restart      "sbcrestart"
+  @slash_command_kick         "sbckick"
 
   # https://discord.com/developers/docs/topics/opcodes-and-status-codes
   @opcode_dispatch              0
@@ -212,7 +213,7 @@ defmodule ChatBot.Bot do
   defp process_frame(:dispatch, :READY, data, _, state) do
     Logger.info("Discord Bot '#{data.user.username}' is READY")
 
-    # create_global_app_commands(self())
+    create_global_app_commands(self())
 
     Process.send_after(self(), :update_status, 2 * 60_000)
 
@@ -316,7 +317,6 @@ defmodule ChatBot.Bot do
 
           _ -> Logger.info("'Start ban' pressed when form not filled out: #{inspect(form_state)}")
         end
-
         {:ok, state}
 
       {true, nil, %{"name" => @slash_command_unban}} ->
@@ -342,7 +342,34 @@ defmodule ChatBot.Bot do
 
           _ -> Logger.info("'Start unban' pressed when form not filled out: #{inspect(form_state)}")
         end
+        {:ok, state}
 
+      {true, nil, %{"name" => @slash_command_kick}} ->
+        respond_to_interaction(interaction, %{
+          type: @interact_resp_channel_msg,
+          data: Messages.kick_message() |> Map.put(:flags, @msg_flag_ephemeral)
+        })
+        {:ok, state}
+
+      {true, @slash_command_kick, %{"custom_id" => "start_kick"}} ->
+        form_state = Map.get(state.interaction_states, msg_interact_id, %{})
+
+        case form_state do
+          %{"player_select" => player_ips} ->
+            kicked_users = player_ips
+            |> Enum.map(&(String.split(&1, "\t")))
+            |> Enum.map(fn [username, ip] ->
+              BanHandler.kick(username, ip, user)
+              username
+            end)
+
+            respond_to_interaction(interaction, %{
+              type: @interact_resp_update_msg,
+              data: Messages.did_kick_message(kicked_users)
+            })
+
+          _ -> Logger.info("'Start kick' pressed when form not filled out: #{inspect(form_state)}")
+        end
         {:ok, state}
 
       {true, _, %{"custom_id" => input_id, "values" => values}} ->
@@ -503,6 +530,14 @@ defmodule ChatBot.Bot do
       name: @slash_command_restart,
       type: @app_command_chat_input,
       description: "Reset a spellbreak server"
+    })
+
+    Process.sleep(1000)
+
+    Req.post("https://discord.com/api/v10/applications/#{discord_app_id()}/commands", headers: http_auth_headers(), json: %{
+      name: @slash_command_kick,
+      type: @app_command_chat_input,
+      description: "Kick someone who is present in an active Spellbreak game"
     })
 
     {:ok, state}

@@ -30,12 +30,8 @@ defmodule ChatBot.Activities do
       }
     end)
 
-    server_text = states
-    |> Enum.sort_by(fn state -> Enum.count(state.players) end, :desc)
-    |> Enum.map(fn state -> "#{state.server_name} (#{Enum.count(state.players)} players)" end)
-
     states
-    |> Enum.sort_by(fn state -> Enum.count(state.players) end)
+    |> Enum.sort_by(fn state -> Enum.count(state.players) end, :desc)
     |> Enum.map(fn state ->
       %{
         "name" => state.server_name,

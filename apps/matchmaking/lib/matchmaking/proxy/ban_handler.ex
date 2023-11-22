@@ -40,6 +40,10 @@ defmodule Matchmaking.Proxy.BanHandler do
     GenServer.call(__MODULE__, {:ban, DateTime.utc_now(), username, ip, banned_by, expires_at})
   end
 
+  def kick(username, ip, kicked_by) do
+    GenServer.call(__MODULE__, {:kick, DateTime.utc_now(), username, ip, kicked_by})
+  end
+
   def all_bans, do: GenServer.call(__MODULE__, :all_bans)
   def is_banned?(host), do: GenServer.call(__MODULE__, {:is_banned?, host})
 
@@ -91,6 +95,19 @@ defmodule Matchmaking.Proxy.BanHandler do
 
     GenServer.cast(self(), :save)
     {:reply, :ok, %{state | bans: bans}}
+  end
+
+  @impl true
+  def handle_call({:kick, ts, username, ip, kicked_by}, _, state) do
+    Logger.info("Kicking #{username} at the request of #{kicked_by}")
+
+    host = IP.from_string!(ip)
+    :gproc.lookup_pids({:p, :l, :proxy_connection})
+    |> Enum.each(fn proxy_connection ->
+      Connection.close_if_host(proxy_connection, host)
+    end)
+
+    {:reply, :ok, state}
   end
 
   def handle_call({:is_banned?, host}, _, state) do

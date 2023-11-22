@@ -64,7 +64,6 @@ defmodule ChatBot.Messages do
     }
   end
 
-
   def unban_message do
     usernames = BanHandler.all_bans()
     |> Enum.map(&(&1.username))
@@ -104,6 +103,47 @@ defmodule ChatBot.Messages do
     }
   end
 
+  def kick_message do
+    match_states = :gproc.lookup_pids({:p, :l, MatchState.gproc_prop})
+
+    players_ip_pairs = match_states
+    |> Enum.flat_map(&MatchState.players_and_ips/1)
+    |> Enum.uniq_by(fn {_, player} -> player.username end)
+
+    %{
+      content: "Who should be kicked?",
+      components: [
+        %{
+          type: 1,
+          components: [
+          %{
+            type: 3,
+            custom_id: "player_select",
+            options: players_ip_pairs |> Enum.map(fn {ip, player} ->
+              %{label: player.username, value: "#{player.username}\t#{ip}"}
+            end),
+            placeholder: "Choose player(s)",
+            min_values: min(Enum.count(players_ip_pairs), 1),
+            max_values: Enum.count(players_ip_pairs)
+          }
+        ]
+      },
+
+      %{
+        type: 1,
+        components: [
+          %{
+            type: 2,
+            label: "Kick",
+            style: 1,
+            custom_id: "start_kick"
+          }
+        ]
+      }
+    ]
+    }
+  end
+
   def did_ban_message(usernames, duration) do
     %{
       content: "Banned #{Enum.join(usernames, " + ")} for #{duration} hours!",
@@ -114,6 +154,13 @@ defmodule ChatBot.Messages do
   def did_unban_message(usernames) do
     %{
       content: "Unbanned #{Enum.join(usernames, " + ")}!",
+      components: []
+    }
+  end
+
+  def did_kick_message(usernames) do
+    %{
+      content: "Kicked #{Enum.join(usernames, " + ")}!",
       components: []
     }
   end
