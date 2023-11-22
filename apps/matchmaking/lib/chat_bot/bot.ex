@@ -259,11 +259,12 @@ defmodule ChatBot.Bot do
         servers = Map.get(form_state, "server_select", [])
         match_managers = :gproc.lookup_pids({:p, :l, MatchManager.gproc_prop})
 
+        respond_to_interaction(interaction, %{type: @interact_resp_deferred_update_msg})
+
         match_managers
         |> Enum.each(fn manager ->
           server_name = MatchManager.server_name(manager)
-
-          if Enum.member?(servers, server_name) do
+          if Enum.member?(servers, "#{server_name}") do
             MatchManager.reset_server(manager)
           end
         end)

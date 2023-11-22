@@ -27,6 +27,7 @@ defmodule Matchmaking.Proxy.Server do
     {:ok, socket} = :gen_udp.open(port, [:binary, active: true])
 
     server_name = Map.get(opts, :name, :no_name)
+    server_manager_port = Map.get(opts, :manager_port)
     {host, host_port} = opts.destination
     Logger.info("Proxy #{server_name} started, pointing 0.0.0.0:#{port} -> #{IP.to_string(host)}:#{host_port}")
 
@@ -69,6 +70,8 @@ defmodule Matchmaking.Proxy.Server do
         id: MatchManager,
         start: {MatchManager, :start_link, [%{
           server_name: server_name,
+          server_manager_port: server_manager_port,
+          server_host: host
         }, [name: match_manager_id]]}
       }
     ]

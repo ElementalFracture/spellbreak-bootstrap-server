@@ -123,6 +123,7 @@ defmodule ChatBot.Messages do
     match_managers = :gproc.lookup_pids({:p, :l, MatchManager.gproc_prop})
 
     server_names = match_managers
+    |> Enum.filter(&MatchManager.has_server_manager?/1)
     |> Enum.map(&MatchManager.server_name/1)
 
     %{
