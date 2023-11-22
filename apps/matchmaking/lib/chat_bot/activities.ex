@@ -40,12 +40,7 @@ defmodule ChatBot.Activities do
       %{
         "name" => state.server_name,
         "type" => 4,
-        "state" => "#{state.server_name} (#{Enum.count(state.players)} players)",
-        "application_id" => "466240509682384896",
-        "emoji" => %{"name" => "desktop"},
-        "party" => %{"size" => [Enum.count(state.players), 60]},
-        "created_at" => :os.system_time(:seconds) * 1000,
-        "flags" => @activity_play
+        "state" => "#{state.server_name} (#{Enum.count(state.players)} players)"
       }
     end)
 
