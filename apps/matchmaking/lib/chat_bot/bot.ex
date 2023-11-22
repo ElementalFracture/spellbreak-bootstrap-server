@@ -2,6 +2,7 @@ defmodule ChatBot.Bot do
   use WebSockex
   import Bitwise
   require Logger
+  alias ChatBot.Activities
   alias Matchmaking.Proxy.MatchManager
   alias Matchmaking.Proxy.BanHandler
   alias ChatBot.Messages
@@ -145,6 +146,8 @@ defmodule ChatBot.Bot do
 
   def identify(pid), do: WebSockex.cast(pid, :identify)
   def resume(pid, state), do: WebSockex.cast(pid, {:resume, state.session_id, state.sequence_number})
+  def set_current_status(pid, status), do: WebSockex.cast(pid, {:set_current_status, status})
+  def create_global_app_commands(pid), do: WebSockex.cast(pid, :create_global_app_commands)
 
   @impl true
   def handle_connect(_, state) do
@@ -153,7 +156,6 @@ defmodule ChatBot.Bot do
     else
       identify(self())
     end
-
 
     {:ok, %{state |
       last_heartbeat: nil,
@@ -209,7 +211,10 @@ defmodule ChatBot.Bot do
   # Received: Dispatch message
   defp process_frame(:dispatch, :READY, data, _, state) do
     Logger.info("Discord Bot '#{data.user.username}' is READY")
-    create_global_app_commands()
+
+    # create_global_app_commands(self())
+
+    Process.send_after(self(), :update_status, 5 * 60_000)
 
     {:ok, %{state |
       resume_url: data.resume_gateway_url,
@@ -371,6 +376,7 @@ defmodule ChatBot.Bot do
     } |> :erlang.term_to_binary()}, state}
   end
 
+  @impl true
   def handle_cast({:resume, session_id, seq_num}, state) do
     Logger.debug("Sending resume message (#{session_id}, #{seq_num})")
 
@@ -384,6 +390,7 @@ defmodule ChatBot.Bot do
     } |> :erlang.term_to_binary()}, state}
   end
 
+  @impl true
   def handle_cast(:identify, state) do
     Logger.debug("Sending identification")
 
@@ -394,11 +401,23 @@ defmodule ChatBot.Bot do
         "properties" => %{"os" => "linux", "browser" => "elixir-bot", "device" => "spellbreak-matchmaking-bot"},
         "intents" => @requested_intents,
         "presence" => %{
-          "since" => DateTime.utc_now() |> DateTime.to_unix,
-          "afk" => false
+          "since" => nil,
+          "afk" => false,
+          "status" => "online",
+          "activities" => Activities.servers_online()
         }
       }
     } |> :erlang.term_to_binary()}, state}
+  end
+
+  @impl true
+  def handle_cast({:set_current_status, status}, state) do
+    Logger.debug("Setting current status...")
+
+    {:reply, {:binary, %{
+      "op" => @opcodes.status_update,
+      "d" => status
+    } |> IO.inspect(label: "current_status") |> :erlang.term_to_binary()}, state}
   end
 
   @impl true
@@ -411,6 +430,20 @@ defmodule ChatBot.Bot do
   def handle_disconnect(%{reason: reason, attempt_number: _, conn: _}, state) do
     Logger.warning("Disconnected from Discord: #{inspect(reason)} - Reconnecting...")
     {:reconnect,  state}
+  end
+
+  @impl true
+  def handle_info(:update_status, state) do
+    set_current_status(self(), %{
+      "since" => nil,
+      "status" => "online",
+      "afk" => false,
+      "activities" => Activities.servers_online(),
+    })
+
+    Process.send_after(self(), :update_status, 5 * 60_000)
+
+    {:ok, state}
   end
 
   @impl true
@@ -435,10 +468,11 @@ defmodule ChatBot.Bot do
     exit(:normal)
   end
 
-  defp create_global_app_commands do
+  @impl true
+  def handle_cast(:create_global_app_commands, state) do
     Logger.info("Registering global Application Commands...")
 
-    {:ok, %{status: 200}} = Req.post("https://discord.com/api/v10/applications/#{discord_app_id()}/commands", headers: http_auth_headers(), json: %{
+    Req.post("https://discord.com/api/v10/applications/#{discord_app_id()}/commands", headers: http_auth_headers(), json: %{
       name: @slash_command_ban,
       type: @app_command_chat_input,
       description: "Ban someone who is present in an active Spellbreak game"
@@ -446,7 +480,7 @@ defmodule ChatBot.Bot do
 
     Process.sleep(1000)
 
-    {:ok, %{status: 200}} = Req.post("https://discord.com/api/v10/applications/#{discord_app_id()}/commands", headers: http_auth_headers(), json: %{
+    Req.post("https://discord.com/api/v10/applications/#{discord_app_id()}/commands", headers: http_auth_headers(), json: %{
       name: @slash_command_unban,
       type: @app_command_chat_input,
       description: "Unban someone from Spellbreak games"
@@ -454,11 +488,13 @@ defmodule ChatBot.Bot do
 
     Process.sleep(1000)
 
-    {:ok, %{status: 200}} = Req.post("https://discord.com/api/v10/applications/#{discord_app_id()}/commands", headers: http_auth_headers(), json: %{
+    Req.post("https://discord.com/api/v10/applications/#{discord_app_id()}/commands", headers: http_auth_headers(), json: %{
       name: @slash_command_restart,
       type: @app_command_chat_input,
       description: "Reset a spellbreak server"
     })
+
+    {:ok, state}
   end
 
   defp send_message_ban_prompt(from_data) do

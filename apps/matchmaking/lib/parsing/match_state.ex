@@ -43,9 +43,8 @@ defmodule Parsing.MatchState do
     GenServer.call(pid, {:get_player_info, conn})
   end
 
-  def players_and_ips(pid) do
-    GenServer.call(pid, :players_and_ips)
-  end
+  def server_name(pid), do: GenServer.call(pid, :server_name)
+  def players_and_ips(pid), do: GenServer.call(pid, :players_and_ips)
 
   @impl true
   def handle_cast({:set_player_info, conn, key, value}, state) do
@@ -58,6 +57,11 @@ defmodule Parsing.MatchState do
     end
 
     {:noreply, %{state | players: players}}
+  end
+
+  @impl true
+  def handle_call(:server_name, _, state) do
+    {:reply, state.server_name, state}
   end
 
   @impl true
