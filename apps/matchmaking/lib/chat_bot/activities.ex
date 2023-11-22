@@ -19,8 +19,8 @@ defmodule ChatBot.Activities do
       }
     end)
 
-    state = states
-    |> Enum.filter(fn state -> Enum.count(state.players) > 0 end)
+    states
+    |> Enum.sort_by(fn state -> Enum.count(state.players) end)
     |> Enum.map(fn state ->
       %{
         "name" => state.server_name,
