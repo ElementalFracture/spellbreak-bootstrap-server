@@ -46,7 +46,7 @@ defmodule Matchmaking.Proxy.MatchManager do
       {:ok, socket} = :gen_tcp.connect(state.server_host, state.server_manager_port, [
         active: false,
         mode: :binary,
-        packet: :line,
+        packet: :raw,
         send_timeout: 2_000,
         send_timeout_close: true
       ], 2_000)
