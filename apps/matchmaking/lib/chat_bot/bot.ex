@@ -12,10 +12,11 @@ defmodule ChatBot.Bot do
     1023813169124221009
   ]
 
-  @slash_command_ban          "sbcban"
-  @slash_command_unban        "sbcunban"
-  @slash_command_restart      "sbcrestart"
-  @slash_command_kick         "sbckick"
+  @slash_command_ban            "sbcban"
+  @slash_command_unban          "sbcunban"
+  @slash_command_restart        "sbcrestart"
+  @slash_command_restart_proxy  "sbcrestartproxy"
+  @slash_command_kick           "sbckick"
 
   # https://discord.com/developers/docs/topics/opcodes-and-status-codes
   @opcode_dispatch              0
@@ -248,6 +249,11 @@ defmodule ChatBot.Bot do
     Logger.debug("Responding to '#{action_name} - #{in_response_to}' for '#{user}' in guild '#{guild_id}'")
 
     case {is_admin, in_response_to, interaction["data"]} do
+      {true, nil, %{"name" => @slash_command_restart_proxy}} ->
+        System.stop(1)
+
+        {:ok, state}
+
       {true, nil, %{"name" => @slash_command_restart}} ->
         respond_to_interaction(interaction, %{
           type: @interact_resp_channel_msg,
@@ -530,6 +536,14 @@ defmodule ChatBot.Bot do
       name: @slash_command_restart,
       type: @app_command_chat_input,
       description: "Reset a spellbreak server"
+    })
+
+    Process.sleep(1000)
+
+    Req.post("https://discord.com/api/v10/applications/#{discord_app_id()}/commands", headers: http_auth_headers(), json: %{
+      name: @slash_command_restart_proxy,
+      type: @app_command_chat_input,
+      description: "Reset the spellbreak proxy"
     })
 
     Process.sleep(1000)
