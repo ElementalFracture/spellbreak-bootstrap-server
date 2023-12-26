@@ -264,7 +264,7 @@ defmodule ChatBot.Bot do
       {true, @slash_command_restart, %{"custom_id" => "reset_servers"}} ->
         form_state = Map.get(state.interaction_states, msg_interact_id, %{})
         servers = Map.get(form_state, "server_select", [])
-        match_managers = :gproc.lookup_pids({:p, :l, MatchManager.gproc_prop})
+        match_managers = :gproc.lookup_pids({:p, :g, MatchManager.gproc_prop})
 
         reset_succeeded = match_managers
         |> Enum.reduce(true, fn manager, curr_state ->

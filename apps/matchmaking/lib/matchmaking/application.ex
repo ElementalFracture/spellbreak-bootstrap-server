@@ -37,12 +37,20 @@ defmodule Matchmaking.Application do
       end
     end)
 
+    topologies = [
+      example: [
+        strategy: Cluster.Strategy.Epmd,
+        config: [hosts: Application.get_env(:matchmaking, :cluster_hosts, [])],
+      ]
+    ]
+
     children = [
       {DynamicSupervisor, strategy: :one_for_one, name: Matchmaking.Proxy.Connections},
-      {BanHandler, %{ban_file: Application.get_env(:matchmaking, :ban_file)}}
+      {BanHandler, %{ban_file: Application.get_env(:matchmaking, :ban_file)}},
+      {Cluster.Supervisor, [topologies, [name: Matchmaking.ClusterSupervisor]]},
     ] ++ server_children
 
-    children = if Application.get_env(:matchmaking, :discord_token) != nil do
+    children = if Application.get_env(:matchmaking, :discord_token) != nil && System.get_env("NO_DISCORD_BOT") != "true" do
       [{ChatBot.Bot, :ok}] ++ children
     else
       children

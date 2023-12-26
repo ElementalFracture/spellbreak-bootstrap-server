@@ -25,7 +25,7 @@ defmodule Parsing.MatchState do
 
   @impl true
   def handle_continue(:setup_watchers, state) do
-    :gproc.reg({:p, :l, @gproc_prop})
+    :gproc.reg({:p, :g, @gproc_prop})
 
     if state.log_dir do
       {:ok, pid} = FileSystem.start_link(dirs: [state.log_dir])

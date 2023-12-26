@@ -71,7 +71,7 @@ defmodule Matchmaking.Proxy.BanHandler do
       ban_expires_at: expires_at
     }
 
-    :gproc.lookup_pids({:p, :l, :proxy_connection})
+    :gproc.lookup_pids({:p, :g, :proxy_connection})
     |> Enum.each(fn proxy_connection ->
       Connection.close_if_host(proxy_connection, host)
     end)
@@ -102,7 +102,7 @@ defmodule Matchmaking.Proxy.BanHandler do
     Logger.info("Kicking #{username} at the request of #{kicked_by}")
 
     host = IP.from_string!(ip)
-    :gproc.lookup_pids({:p, :l, :proxy_connection})
+    :gproc.lookup_pids({:p, :g, :proxy_connection})
     |> Enum.each(fn proxy_connection ->
       Connection.close_if_host(proxy_connection, host)
     end)

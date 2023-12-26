@@ -7,7 +7,13 @@ defmodule Matchmaking.MixProject do
       version: "0.1.0",
       elixir: "~> 1.12",
       start_permanent: Mix.env() == :prod,
-      deps: deps()
+      deps: deps(),
+      releases: [
+        matchmaking: [
+          include_executables_for: [:unix],
+          applications: [runtime_tools: :permanent]
+        ],
+      ]
     ]
   end
 
@@ -29,7 +35,8 @@ defmodule Matchmaking.MixProject do
       {:websockex, "~> 0.4.3"},
       {:req, "~> 0.4.0"},
       {:jason, "~> 1.4"},
-      {:gproc, "~> 0.9.1"}
+      {:gproc, "~> 0.9.1"},
+      {:libcluster, "~> 3.3.3"}
     ]
   end
 end

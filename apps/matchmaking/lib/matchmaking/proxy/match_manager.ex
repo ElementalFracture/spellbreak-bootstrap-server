@@ -19,7 +19,7 @@ defmodule Matchmaking.Proxy.MatchManager do
 
   @impl true
   def handle_continue(:setup, state) do
-    :gproc.reg({:p, :l, @gproc_prop})
+    :gproc.reg({:p, :g, @gproc_prop})
 
     {:noreply, state}
   end

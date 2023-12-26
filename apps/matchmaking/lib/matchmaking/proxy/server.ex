@@ -233,5 +233,5 @@ defmodule Matchmaking.Proxy.Server do
     Process.send_after(self(), :cleanup, recycle_port_ttl * 60 * 1000)
   end
 
-  defp via_tuple(name_tuple), do: {:via, :gproc, {:n, :l, name_tuple}}
+  defp via_tuple(name_tuple), do: {:via, :gproc, {:n, :g, name_tuple}}
 end

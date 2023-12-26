@@ -24,7 +24,7 @@ defmodule Matchmaking.Proxy.Connection do
     dest_host,
     dest_port
   }) do
-    :gproc.reg({:p, :l, :proxy_connection})
+    :gproc.reg({:p, :g, :proxy_connection})
 
     {:ok, socket} = if direction == :to_downstream do
       {:ok, downstream_socket}

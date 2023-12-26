@@ -4,7 +4,7 @@ defmodule ChatBot.Messages do
   alias Parsing.MatchState
 
   def ban_message do
-    match_states = :gproc.lookup_pids({:p, :l, MatchState.gproc_prop})
+    match_states = :gproc.lookup_pids({:p, :g, MatchState.gproc_prop})
 
     players_ip_pairs = match_states
     |> Enum.flat_map(&MatchState.players_and_ips/1)
@@ -104,7 +104,7 @@ defmodule ChatBot.Messages do
   end
 
   def kick_message do
-    match_states = :gproc.lookup_pids({:p, :l, MatchState.gproc_prop})
+    match_states = :gproc.lookup_pids({:p, :g, MatchState.gproc_prop})
 
     players_ip_pairs = match_states
     |> Enum.flat_map(&MatchState.players_and_ips/1)
@@ -167,7 +167,7 @@ defmodule ChatBot.Messages do
 
 
   def server_reset_message do
-    match_managers = :gproc.lookup_pids({:p, :l, MatchManager.gproc_prop})
+    match_managers = :gproc.lookup_pids({:p, :g, MatchManager.gproc_prop})
 
     server_names = match_managers
     |> Enum.filter(&MatchManager.has_server_manager?/1)
