@@ -264,7 +264,7 @@ defmodule ChatBot.Bot do
       {true, @slash_command_restart, %{"custom_id" => "reset_servers"}} ->
         form_state = Map.get(state.interaction_states, msg_interact_id, %{})
         servers = Map.get(form_state, "server_select", [])
-        match_managers = :gproc.lookup_pids({:p, :g, MatchManager.gproc_prop})
+        match_managers = Swarm.members(MatchManager.global_group)
 
         reset_succeeded = match_managers
         |> Enum.reduce(true, fn manager, curr_state ->
@@ -272,7 +272,9 @@ defmodule ChatBot.Bot do
           if Enum.member?(servers, "#{server_name}") do
             case MatchManager.reset_server(manager) do
               :ok -> curr_state
-              {:error, _} -> false
+              {:error, err} ->
+                Logger.error("Error resetting server: #{inspect(err)}")
+                false
             end
           else
             curr_state
@@ -383,6 +385,9 @@ defmodule ChatBot.Bot do
         respond_to_interaction(interaction, %{type: @interact_resp_deferred_update_msg})
 
         {:ok, put_in(state, [:interaction_states, Access.key(interact_id, %{}), input_id], values)}
+
+      {false, _, _} ->
+        Logger.warn("Non-admin tried to execue command (#{action_name}): #{inspect(interaction)}")
 
       _ ->
         Logger.debug("Unknown interaction received (#{action_name}): #{inspect(interaction)}")

@@ -5,7 +5,7 @@ defmodule Parsing.MatchState do
   alias Matchmaking.Proxy.Utility
 
   @log_regex ~r/.*\/g3-([0-9]+)\.log$/
-  @gproc_prop :matchmaking_match_state
+  @global_group :matchmaking_match_state
 
   def start_link(args, opts \\ []) do
     GenServer.start_link(__MODULE__, args, opts)
@@ -25,7 +25,7 @@ defmodule Parsing.MatchState do
 
   @impl true
   def handle_continue(:setup_watchers, state) do
-    :gproc.reg({:p, :g, @gproc_prop})
+    Swarm.join(@global_group, self())
 
     if state.log_dir do
       {:ok, pid} = FileSystem.start_link(dirs: [state.log_dir])
@@ -102,5 +102,5 @@ defmodule Parsing.MatchState do
     {:noreply, state}
   end
 
-  def gproc_prop, do: @gproc_prop
+  def global_group, do: @global_group
 end

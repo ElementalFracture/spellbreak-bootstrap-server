@@ -2,6 +2,8 @@ defmodule Matchmaking.Proxy.Connection do
   alias Parsing.MatchParser
   use GenServer
 
+  @global_group :proxy_connections
+
   def start_link(opts) do
     GenServer.start_link(__MODULE__, {
       Map.fetch!(opts, :identifier),
@@ -24,7 +26,7 @@ defmodule Matchmaking.Proxy.Connection do
     dest_host,
     dest_port
   }) do
-    :gproc.reg({:p, :g, :proxy_connection})
+    Swarm.join(@global_group, self())
 
     {:ok, socket} = if direction == :to_downstream do
       {:ok, downstream_socket}
@@ -112,4 +114,6 @@ defmodule Matchmaking.Proxy.Connection do
     send(dest_pid, {host, port}, data)
     {:noreply, state}
   end
+
+  def global_group, do: @global_group
 end

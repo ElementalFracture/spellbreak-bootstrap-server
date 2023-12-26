@@ -14,8 +14,8 @@ defmodule ChatBot.Activities do
   @activity_embedded              1 <<< 8
 
   def servers_online do
-    match_managers = :gproc.lookup_pids({:p, :g, MatchManager.gproc_prop})
-    match_states = :gproc.lookup_pids({:p, :g, MatchState.gproc_prop})
+    match_managers = Swarm.members(MatchManager.global_group)
+    match_states = Swarm.members(MatchState.global_group)
 
     states = match_states
     |> Enum.map(fn match_state ->

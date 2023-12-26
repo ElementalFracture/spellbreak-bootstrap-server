@@ -2,7 +2,7 @@ defmodule Matchmaking.Proxy.MatchManager do
   use GenServer
   require Logger
 
-  @gproc_prop :matchmaking_match_manager
+  @global_group :matchmaking_match_manager
 
   def start_link(args, opts \\ []) do
     GenServer.start_link(__MODULE__, args, opts)
@@ -19,7 +19,7 @@ defmodule Matchmaking.Proxy.MatchManager do
 
   @impl true
   def handle_continue(:setup, state) do
-    :gproc.reg({:p, :g, @gproc_prop})
+    Swarm.join(@global_group, self())
 
     {:noreply, state}
   end
@@ -61,5 +61,5 @@ defmodule Matchmaking.Proxy.MatchManager do
 
   end
 
-  def gproc_prop, do: @gproc_prop
+  def global_group, do: @global_group
 end

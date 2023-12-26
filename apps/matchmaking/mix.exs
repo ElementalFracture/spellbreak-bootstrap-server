@@ -20,7 +20,7 @@ defmodule Matchmaking.MixProject do
   # Run "mix help compile.app" to learn about applications.
   def application do
     [
-      extra_applications: [:logger, :websockex, :gproc],
+      extra_applications: [:logger, :websockex],
       mod: {Matchmaking.Application, []}
     ]
   end
@@ -35,8 +35,8 @@ defmodule Matchmaking.MixProject do
       {:websockex, "~> 0.4.3"},
       {:req, "~> 0.4.0"},
       {:jason, "~> 1.4"},
-      {:gproc, "~> 0.9.1"},
-      {:libcluster, "~> 3.3.3"}
+      {:libcluster, "~> 3.3.3"},
+      {:swarm, "~> 3.0"}
     ]
   end
 end
