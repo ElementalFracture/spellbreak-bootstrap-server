@@ -313,10 +313,7 @@ defmodule ChatBot.Bot do
         |> Enum.each(fn manager ->
           case MatchManager.get_status(manager) do
             {:ok, status} ->
-              respond_to_interaction(interaction, %{
-                type: @interact_resp_channel_msg,
-                data: Messages.fetched_server_status_message(manager, status)
-              })
+              send_server_status(interaction, Messages.fetched_server_status_message(manager, status))
 
             {:error, err} ->
               Logger.error("Error fetching server status: #{inspect(err)}")
@@ -606,18 +603,23 @@ defmodule ChatBot.Bot do
     {:ok, state}
   end
 
-  defp send_message_ban_prompt(from_data) do
-    {:ok, %{status: 200}} = Req.post("https://discord.com/api/v10/channels/#{from_data["channel_id"]}/messages", [
+  defp send_server_status(interaction, message) do
+    interaction |> IO.inspect(label: "interaction")
+    {:ok, %{status: 200}} = Req.post("https://discord.com/api/v10/channels/#{interaction["message"]["channel_id"]}/messages", [
       headers: http_auth_headers(),
-      json: Messages.ban_message()
+      json: message
     ])
   end
 
   defp respond_to_interaction(interaction, response) do
-    {:ok, %{status: 204}} = Req.post("https://discord.com/api/v10/interactions/#{interaction["id"]}/#{interaction["token"]}/callback", [
+    case Req.post("https://discord.com/api/v10/interactions/#{interaction["id"]}/#{interaction["token"]}/callback", [
       headers: http_auth_headers(),
       json: response
-    ])
+    ]) do
+      {:ok, %{status: 204}} -> :ok
+      {:ok, %{status: 404}} -> :ok
+      {:ok, %{status: 400}} -> :ok
+    end
   end
 
   defp http_auth_headers, do: %{Authorization: "Bot #{discord_token()}"}

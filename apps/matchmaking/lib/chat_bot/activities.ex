@@ -17,17 +17,23 @@ defmodule ChatBot.Activities do
     match_managers = Swarm.members(MatchManager.global_group)
     match_states = Swarm.members(MatchState.global_group)
 
-    states = match_states
-    |> Enum.map(fn match_state ->
-      server_name = MatchState.server_name(match_state)
+    states = match_managers
+    |> Enum.flat_map(fn match_manager ->
+      server_name = MatchManager.server_name(match_manager)
 
-      players = MatchState.players_and_ips(match_state)
-      |> Enum.uniq_by(fn {_, player} -> player.username end)
+      case MatchManager.get_status(match_manager) do
+        {:ok, status} ->
+          players = status["players"]
+          |> Enum.filter(fn player -> !player["is_bot"] end)
+          |> Enum.map(fn player -> player["username"] end)
 
-      %{
-        server_name: "#{server_name}",
-        players: players
-      }
+          [%{
+            server_name: "#{server_name}",
+            players: players
+          }]
+
+        {:error, _} -> []
+      end
     end)
 
     states
