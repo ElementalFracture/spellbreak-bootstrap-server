@@ -46,7 +46,7 @@ defmodule Matchmaking.Application do
 
     children = [
       {DynamicSupervisor, strategy: :one_for_one, name: Matchmaking.Proxy.Connections},
-      {BanHandler, %{ban_file: Application.get_env(:matchmaking, :ban_file)}},
+      {BanHandler, %{id: Keyword.keys(servers) |> Enum.at(0), ban_file: Application.get_env(:matchmaking, :ban_file)}},
       {Cluster.Supervisor, [topologies, [name: Matchmaking.ClusterSupervisor]]},
     ] ++ server_children
 

@@ -35,6 +35,7 @@ defmodule Matchmaking.MixProject do
       {:websockex, "~> 0.4.3"},
       {:req, "~> 0.4.0"},
       {:jason, "~> 1.4"},
+      {:gproc, "~> 0.9.1"},
       {:libcluster, "~> 3.3.3"},
       {:swarm, "~> 3.0"}
     ]

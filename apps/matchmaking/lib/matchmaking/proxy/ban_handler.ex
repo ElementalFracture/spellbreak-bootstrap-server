@@ -4,12 +4,16 @@ defmodule Matchmaking.Proxy.BanHandler do
   alias Matchmaking.Proxy.Connection
   alias Matchmaking.Proxy.Utility
 
-  def start_link(%{ban_file: ban_filename}) do
-    GenServer.start_link(__MODULE__, ban_filename, name: __MODULE__)
+  @global_group :ban_handler
+
+  def start_link(%{id: id, ban_file: ban_filename}) do
+    GenServer.start_link(__MODULE__, ban_filename, name: {:via, :swarm, {:ban_handler, id}})
   end
 
   @impl true
   def init(ban_filename) do
+    Swarm.join(@global_group, self())
+
     bans = if ban_filename != nil do
       Path.dirname(ban_filename) |> File.mkdir_p!()
 
@@ -33,19 +37,30 @@ defmodule Matchmaking.Proxy.BanHandler do
   end
 
   def unban(username, unbanned_by) do
-    GenServer.call(__MODULE__, {:unban, DateTime.utc_now(), username, unbanned_by})
+    Swarm.members(@global_group)
+    |> Enum.each(fn handler -> GenServer.call(handler, {:unban, DateTime.utc_now(), username, unbanned_by}) end)
   end
 
   def ban(username, ip, banned_by, expires_at) do
-    GenServer.call(__MODULE__, {:ban, DateTime.utc_now(), username, ip, banned_by, expires_at})
+    Swarm.members(@global_group)
+    |> Enum.each(fn handler -> GenServer.call(handler, {:ban, DateTime.utc_now(), username, ip, banned_by, expires_at}) end)
   end
 
   def kick(username, ip, kicked_by) do
-    GenServer.call(__MODULE__, {:kick, DateTime.utc_now(), username, ip, kicked_by})
+    Swarm.members(@global_group)
+    |> Enum.each(fn handler -> GenServer.call(handler, {:kick, DateTime.utc_now(), username, ip, kicked_by}) end)
   end
 
-  def all_bans, do: GenServer.call(__MODULE__, :all_bans)
-  def is_banned?(host), do: GenServer.call(__MODULE__, {:is_banned?, host})
+  def all_bans do
+    Swarm.members(@global_group)
+    |> Enum.flat_map(fn handler -> GenServer.call(handler, :all_bans) end)
+  end
+  def is_banned?(host) do
+    Swarm.members(@global_group)
+    |> Enum.reduce(false, fn handler, is_banned ->
+      is_banned || GenServer.call(handler, {:is_banned?, host})
+    end)
+  end
 
   @impl true
   def handle_call(:all_bans, _, state) do

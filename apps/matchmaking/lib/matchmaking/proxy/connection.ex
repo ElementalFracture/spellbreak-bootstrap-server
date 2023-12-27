@@ -13,7 +13,7 @@ defmodule Matchmaking.Proxy.Connection do
       Map.fetch!(opts, :external_port),
       Map.fetch!(opts, :dest_host),
       Map.fetch!(opts, :dest_port)
-    })
+    }, name: {:via, :swarm, {:proxy_connection, Map.fetch!(opts, :identifier), Map.fetch!(opts, :direction)}})
   end
 
   @impl true
@@ -77,6 +77,7 @@ defmodule Matchmaking.Proxy.Connection do
 
   @impl true
   def handle_cast({:close_if_host, host}, state) do
+    {host, state} |> IO.inspect(label: "close_if_host")
     if host == state.dest_host do
       GenServer.cast(self(), :close)
     end
