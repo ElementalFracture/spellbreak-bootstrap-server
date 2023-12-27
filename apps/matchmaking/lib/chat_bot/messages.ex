@@ -219,4 +219,72 @@ defmodule ChatBot.Messages do
       components: []
     }
   end
+
+
+  def server_status_message do
+    match_managers = Swarm.members(MatchManager.global_group)
+
+    server_names = match_managers
+    |> Enum.filter(&MatchManager.has_server_manager?/1)
+    |> Enum.map(&MatchManager.server_name/1)
+
+    %{
+      content: "What server status would you like?",
+      components: [
+        %{
+          type: 1,
+          components: [
+          %{
+            type: 3,
+            custom_id: "server_select",
+            options: server_names |> Enum.map(fn server_name ->
+              %{label: server_name, value: server_name}
+            end),
+            placeholder: "Choose server(s)",
+            min_values: min(Enum.count(server_names), 1),
+            max_values: Enum.count(server_names)
+          }
+        ]
+      },
+      %{
+        type: 1,
+        components: [
+          %{
+            type: 2,
+            label: "Get Statuses",
+            style: 1,
+            custom_id: "status_servers"
+          }
+        ]
+      }
+    ]
+    }
+  end
+
+  def fetching_server_statuses_message(servers) do
+    %{
+      content: "Fetching statuses for #{Enum.join(servers, " + ")}!",
+      components: []
+    }
+  end
+
+  def fetched_server_status_message(manager, status) do
+    server_name = MatchManager.server_name(manager)
+
+    real_players = status["players"]
+    |> Enum.filter(fn player -> !player["is_bot"] end)
+
+    player_message = if Enum.count(real_players) > 0 do
+      real_players
+      |> Enum.map(fn player -> "**#{player["username"]}**" end)
+      |> Enum.join("\n")
+    else
+      "No players currently in match."
+    end
+
+    %{
+      content: "Currently #{Enum.count(real_players)} players in **#{server_name}** (*#{status["state"]}*):\n#{player_message}",
+      components: []
+    }
+  end
 end

@@ -17,6 +17,7 @@ defmodule ChatBot.Bot do
   @slash_command_restart        "sbcrestart"
   @slash_command_restart_proxy  "sbcrestartproxy"
   @slash_command_kick           "sbckick"
+  @slash_command_server_status  "sbcstatus"
 
   # https://discord.com/developers/docs/topics/opcodes-and-status-codes
   @opcode_dispatch              0
@@ -294,6 +295,41 @@ defmodule ChatBot.Bot do
         end
         {:ok, state}
 
+
+      {true, nil, %{"name" => @slash_command_server_status}} ->
+        respond_to_interaction(interaction, %{
+          type: @interact_resp_channel_msg,
+          data: Messages.server_status_message() |> Map.put(:flags, @msg_flag_ephemeral)
+        })
+        {:ok, state}
+
+      {true, @slash_command_server_status, %{"custom_id" => "status_servers"}} ->
+        form_state = Map.get(state.interaction_states, msg_interact_id, %{})
+        servers = Map.get(form_state, "server_select", [])
+        match_managers = Swarm.members(MatchManager.global_group)
+
+        match_managers
+        |> Enum.filter(fn manager -> Enum.member?(servers, "#{MatchManager.server_name(manager)}") end)
+        |> Enum.each(fn manager ->
+          case MatchManager.get_status(manager) do
+            {:ok, status} ->
+              respond_to_interaction(interaction, %{
+                type: @interact_resp_channel_msg,
+                data: Messages.fetched_server_status_message(manager, status)
+              })
+
+            {:error, err} ->
+              Logger.error("Error fetching server status: #{inspect(err)}")
+          end
+        end)
+
+        respond_to_interaction(interaction, %{
+          type: @interact_resp_update_msg,
+          data: Messages.fetching_server_statuses_message(servers) |> Map.put(:flags, @msg_flag_ephemeral)
+        })
+
+        {:ok, state}
+
       {true, nil, %{"name" => @slash_command_ban}} ->
         respond_to_interaction(interaction, %{
           type: @interact_resp_channel_msg,
@@ -520,6 +556,14 @@ defmodule ChatBot.Bot do
   @impl true
   def handle_cast(:create_global_app_commands, state) do
     Logger.info("Registering global Application Commands...")
+
+    Req.post("https://discord.com/api/v10/applications/#{discord_app_id()}/commands", headers: http_auth_headers(), json: %{
+      name: @slash_command_server_status,
+      type: @app_command_chat_input,
+      description: "Get the current status of a Spellbreak server"
+    })
+
+    Process.sleep(1000)
 
     Req.post("https://discord.com/api/v10/applications/#{discord_app_id()}/commands", headers: http_auth_headers(), json: %{
       name: @slash_command_ban,
