@@ -172,6 +172,8 @@ defmodule ChatBot.Messages do
     server_names = match_managers
     |> Enum.filter(&MatchManager.has_server_manager?/1)
     |> Enum.map(&MatchManager.server_name/1)
+    |> Enum.sort()
+    |> Enum.reverse()
 
     %{
       content: "Which servers should be restarted?",
@@ -227,6 +229,8 @@ defmodule ChatBot.Messages do
     server_names = match_managers
     |> Enum.filter(&MatchManager.has_server_manager?/1)
     |> Enum.map(&MatchManager.server_name/1)
+    |> Enum.sort()
+    |> Enum.reverse()
 
     %{
       content: "What server status would you like?",
