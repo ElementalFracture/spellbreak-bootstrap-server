@@ -48,8 +48,7 @@ defmodule Matchmaking.Proxy.MatchManager do
       {:ok, socket} = :gen_tcp.connect(state.server_host, 4951, [
         active: false,
         mode: :binary,
-        packet: :raw,
-        recbuf: 10_000_000,
+        packet: :line,
         send_timeout: 1_000,
         send_timeout_close: true
       ], 1_000)
@@ -68,7 +67,7 @@ defmodule Matchmaking.Proxy.MatchManager do
         {:error, err} ->
           Logger.warning("Error from 'get_players' command -> #{inspect(state.server_host)} (#{inspect(err)})...")
           :gen_tcp.close(socket)
-          {:reply, {:err, err}, state}
+          {:reply, {:error, err}, state}
 
       end
     rescue
