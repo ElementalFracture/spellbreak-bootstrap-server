@@ -12,12 +12,13 @@ defmodule ChatBot.Bot do
     1023813169124221009
   ]
 
-  @slash_command_ban            "sbcban"
-  @slash_command_unban          "sbcunban"
-  @slash_command_restart        "sbcrestart"
-  @slash_command_restart_proxy  "sbcrestartproxy"
-  @slash_command_kick           "sbckick"
-  @slash_command_server_status  "sbcstatus"
+  @slash_command_ban                "sbcban"
+  @slash_command_unban              "sbcunban"
+  @slash_command_restart            "sbcrestart"
+  @slash_command_restart_proxy      "sbcrestartproxy"
+  @slash_command_kick               "sbckick"
+  @slash_command_server_status      "sbcstatus"
+  @slash_command_server_status_all  "sbcstatusall"
 
   # https://discord.com/developers/docs/topics/opcodes-and-status-codes
   @opcode_dispatch              0
@@ -295,6 +296,33 @@ defmodule ChatBot.Bot do
         end
         {:ok, state}
 
+      {true, nil, %{"name" => @slash_command_server_status_all}} ->
+        form_state = Map.get(state.interaction_states, msg_interact_id, %{})
+        servers = Map.get(form_state, "server_select", [])
+        match_managers = Swarm.members(MatchManager.global_group)
+
+        respond_to_interaction(interaction, %{
+          type: @interact_resp_update_msg,
+          data: Messages.fetching_server_statuses_message(servers) |> Map.put(:flags, @msg_flag_ephemeral)
+        })
+
+        embeds = match_managers
+        |> Enum.flat_map(fn manager ->
+          case MatchManager.get_status(manager) do
+            {:ok, %{"players" => []}} -> []
+            {:ok, status} ->
+              [Messages.fetched_server_status_embed(manager, status)]
+
+            {:error, err} ->
+              Logger.error("Error fetching server status: #{inspect(err)}")
+              [Messages.fetched_server_status_failure_embed(manager)]
+          end
+        end)
+
+        send_server_status(interaction["message"]["channel_id"], Messages.with_embeds(embeds) |> IO.inspect(label: "HMM"))
+
+        {:ok, state}
+
 
       {true, nil, %{"name" => @slash_command_server_status}} ->
         respond_to_interaction(interaction, %{
@@ -308,22 +336,25 @@ defmodule ChatBot.Bot do
         servers = Map.get(form_state, "server_select", [])
         match_managers = Swarm.members(MatchManager.global_group)
 
-        match_managers
-        |> Enum.filter(fn manager -> Enum.member?(servers, "#{MatchManager.server_name(manager)}") end)
-        |> Enum.each(fn manager ->
-          case MatchManager.get_status(manager) do
-            {:ok, status} ->
-              send_server_status(interaction, Messages.fetched_server_status_message(manager, status))
-
-            {:error, err} ->
-              Logger.error("Error fetching server status: #{inspect(err)}")
-          end
-        end)
-
         respond_to_interaction(interaction, %{
           type: @interact_resp_update_msg,
           data: Messages.fetching_server_statuses_message(servers) |> Map.put(:flags, @msg_flag_ephemeral)
         })
+
+        embeds = match_managers
+        |> Enum.filter(fn manager -> Enum.member?(servers, "#{MatchManager.server_name(manager)}") end)
+        |> Enum.flat_map(fn manager ->
+          case MatchManager.get_status(manager) do
+            {:ok, status} ->
+              [Messages.fetched_server_status_embed(manager, status)]
+
+            {:error, err} ->
+              Logger.error("Error fetching server status: #{inspect(err)}")
+              [Messages.fetched_server_status_failure_embed(manager)]
+          end
+        end)
+
+        send_server_status(interaction["message"]["channel_id"], Messages.with_embeds(embeds) |> IO.inspect(label: "HMM"))
 
         {:ok, state}
 
@@ -546,7 +577,7 @@ defmodule ChatBot.Bot do
 
   @impl true
   def terminate(reason, state) do
-    Logger.info("Socket Terminating:\n#{inspect reason}\n\n#{inspect state}")
+    Logger.info("Discord - Socket Terminating:\n#{inspect reason}\n\n#{inspect state}")
     exit(:normal)
   end
 
@@ -603,9 +634,8 @@ defmodule ChatBot.Bot do
     {:ok, state}
   end
 
-  defp send_server_status(interaction, message) do
-    interaction |> IO.inspect(label: "interaction")
-    {:ok, %{status: 200}} = Req.post("https://discord.com/api/v10/channels/#{interaction["message"]["channel_id"]}/messages", [
+  defp send_server_status(channel_id, message) do
+    {:ok, %{status: 200}} = Req.post("https://discord.com/api/v10/channels/#{channel_id}/messages", [
       headers: http_auth_headers(),
       json: message
     ])

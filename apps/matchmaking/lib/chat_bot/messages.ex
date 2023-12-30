@@ -272,7 +272,15 @@ defmodule ChatBot.Messages do
     }
   end
 
-  def fetched_server_status_message(manager, status) do
+  def with_embeds(embeds) do
+    %{
+      content: "",
+      embeds: embeds,
+      components: []
+    }
+  end
+
+  def fetched_server_status_embed(manager, status) do
     server_name = MatchManager.server_name(manager)
 
     real_players = status["players"]
@@ -287,8 +295,35 @@ defmodule ChatBot.Messages do
     end
 
     %{
-      content: "Currently #{Enum.count(real_players)} players in **#{server_name}** (*#{status["state"]}*):\n#{player_message}",
-      components: []
+      type: "rich",
+      title: server_name,
+      description: "",
+      color: 0x00ff00,
+      fields: [
+        %{
+          name: "Players (#{Enum.count(real_players)})",
+          value: player_message
+        }
+      ],
+      timestamp: DateTime.utc_now() |> DateTime.to_iso8601()
+    }
+  end
+
+  def fetched_server_status_failure_embed(manager) do
+    server_name = MatchManager.server_name(manager)
+
+    %{
+      type: "rich",
+      title: server_name,
+      description: "",
+      color: 0xff0000,
+      fields: [
+        %{
+          name: "Error fetching status",
+          value: "Server did not respond to status check"
+        }
+      ],
+      timestamp: DateTime.utc_now() |> DateTime.to_iso8601()
     }
   end
 end

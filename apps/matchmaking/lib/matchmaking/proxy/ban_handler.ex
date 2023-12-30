@@ -113,7 +113,7 @@ defmodule Matchmaking.Proxy.BanHandler do
   end
 
   @impl true
-  def handle_call({:kick, ts, username, ip, kicked_by}, _, state) do
+  def handle_call({:kick, _ts, username, ip, kicked_by}, _, state) do
     Logger.info("Kicking #{username} at the request of #{kicked_by}")
 
     host = IP.from_string!(ip)
