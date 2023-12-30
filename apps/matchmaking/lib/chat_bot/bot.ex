@@ -586,6 +586,14 @@ defmodule ChatBot.Bot do
     Logger.info("Registering global Application Commands...")
 
     Req.post("https://discord.com/api/v10/applications/#{discord_app_id()}/commands", headers: http_auth_headers(), json: %{
+      name: @slash_command_server_status_all,
+      type: @app_command_chat_input,
+      description: "Get the current status of all Spellbreak servers"
+    })
+
+    Process.sleep(1000)
+
+    Req.post("https://discord.com/api/v10/applications/#{discord_app_id()}/commands", headers: http_auth_headers(), json: %{
       name: @slash_command_server_status,
       type: @app_command_chat_input,
       description: "Get the current status of a Spellbreak server"
