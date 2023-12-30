@@ -302,8 +302,8 @@ defmodule ChatBot.Bot do
         match_managers = Swarm.members(MatchManager.global_group)
 
         respond_to_interaction(interaction, %{
-          type: @interact_resp_update_msg,
-          data: Messages.fetching_server_statuses_message(servers) |> Map.put(:flags, @msg_flag_ephemeral)
+          type: @interact_resp_channel_msg,
+          data: Messages.fetching_all_server_statuses_message() |> Map.put(:flags, @msg_flag_ephemeral)
         })
 
         embeds = match_managers

@@ -265,6 +265,13 @@ defmodule ChatBot.Messages do
     }
   end
 
+  def fetching_all_server_statuses_message do
+    %{
+      content: "Fetching statuses for all servers!",
+      components: []
+    }
+  end
+
   def fetching_server_statuses_message(servers) do
     %{
       content: "Fetching statuses for #{Enum.join(servers, " + ")}!",
