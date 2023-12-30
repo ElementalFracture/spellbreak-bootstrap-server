@@ -301,11 +301,6 @@ defmodule ChatBot.Bot do
         servers = Map.get(form_state, "server_select", [])
         match_managers = Swarm.members(MatchManager.global_group)
 
-        respond_to_interaction(interaction, %{
-          type: @interact_resp_channel_msg,
-          data: Messages.fetching_all_server_statuses_message() |> Map.put(:flags, @msg_flag_ephemeral)
-        })
-
         embeds = match_managers
         |> Enum.flat_map(fn manager ->
           case MatchManager.get_status(manager) do
@@ -319,7 +314,10 @@ defmodule ChatBot.Bot do
           end
         end)
 
-        send_server_status(interaction["message"]["channel_id"], Messages.with_embeds(embeds) |> IO.inspect(label: "HMM"))
+        respond_to_interaction(interaction, %{
+          type: @interact_resp_channel_msg,
+          data: Messages.with_embeds(embeds)
+        })
 
         {:ok, state}
 
@@ -354,7 +352,7 @@ defmodule ChatBot.Bot do
           end
         end)
 
-        send_server_status(interaction["message"]["channel_id"], Messages.with_embeds(embeds) |> IO.inspect(label: "HMM"))
+        send_server_status(interaction["message"]["channel_id"], Messages.with_embeds(embeds))
 
         {:ok, state}
 
