@@ -308,8 +308,14 @@ defmodule ChatBot.Messages do
       color: 0x00ff00,
       fields: [
         %{
+          name: "Match State",
+          value: status["state"],
+          inline: true
+        },
+        %{
           name: "Players (#{Enum.count(real_players)})",
-          value: player_message
+          value: player_message,
+          inline: true
         }
       ],
       timestamp: DateTime.utc_now() |> DateTime.to_iso8601()
