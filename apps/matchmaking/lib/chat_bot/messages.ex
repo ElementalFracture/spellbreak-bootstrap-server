@@ -308,13 +308,13 @@ defmodule ChatBot.Messages do
       color: 0x00ff00,
       fields: [
         %{
-          name: "Match State",
-          value: status["state"],
-          inline: false
-        },
-        %{
           name: "Players (#{Enum.count(real_players)})",
           value: player_message,
+          inline: true
+        },
+        %{
+          name: "Match State",
+          value: status["state"],
           inline: true
         }
       ],
