@@ -49,6 +49,7 @@ defmodule Matchmaking.Proxy.MatchManager do
         active: false,
         mode: :binary,
         packet: :line,
+        recbuf: 10_000_000,
         send_timeout: 1_000,
         send_timeout_close: true
       ], 1_000)
