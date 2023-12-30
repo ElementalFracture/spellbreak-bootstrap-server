@@ -310,7 +310,7 @@ defmodule ChatBot.Messages do
         %{
           name: "Match State",
           value: status["state"],
-          inline: true
+          inline: false
         },
         %{
           name: "Players (#{Enum.count(real_players)})",
