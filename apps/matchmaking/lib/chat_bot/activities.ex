@@ -15,7 +15,6 @@ defmodule ChatBot.Activities do
 
   def servers_online do
     match_managers = Swarm.members(MatchManager.global_group)
-    match_states = Swarm.members(MatchState.global_group)
 
     states = match_managers
     |> Enum.flat_map(fn match_manager ->

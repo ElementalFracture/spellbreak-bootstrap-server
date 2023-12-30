@@ -12,6 +12,8 @@ defmodule ChatBot.Bot do
     1023813169124221009
   ]
 
+  @update_status_interval 60_000
+
   @slash_command_ban                "sbcban"
   @slash_command_unban              "sbcunban"
   @slash_command_restart            "sbcrestart"
@@ -142,7 +144,8 @@ defmodule ChatBot.Bot do
       session_id: nil,
       last_heartbeat: nil,
       last_heartbeat_ack: nil,
-      interaction_states: %{}
+      interaction_states: %{},
+      status_message_id: nil
     }, opts)
 
     {:ok, client}
@@ -218,7 +221,7 @@ defmodule ChatBot.Bot do
 
     create_global_app_commands(self())
 
-    Process.send_after(self(), :update_status, 2 * 60_000)
+    Process.send_after(self(), :update_status, @update_status_interval)
 
     {:ok, %{state |
       resume_url: data.resume_gateway_url,
@@ -297,8 +300,6 @@ defmodule ChatBot.Bot do
         {:ok, state}
 
       {true, nil, %{"name" => @slash_command_server_status_all}} ->
-        form_state = Map.get(state.interaction_states, msg_interact_id, %{})
-        servers = Map.get(form_state, "server_select", [])
         match_managers = Swarm.members(MatchManager.global_group)
 
         embeds = match_managers
@@ -545,6 +546,8 @@ defmodule ChatBot.Bot do
 
   @impl true
   def handle_info(:update_status, state) do
+    match_managers = Swarm.members(MatchManager.global_group)
+
     set_current_status(self(), %{
       "since" => nil,
       "status" => "online",
@@ -552,7 +555,35 @@ defmodule ChatBot.Bot do
       "activities" => Activities.servers_online(),
     })
 
-    Process.send_after(self(), :update_status, 2 * 60_000)
+    status_thread_id = Application.get_env(:matchmaking, :discord_status_thread)
+    state = if status_thread_id do
+      embeds = match_managers
+      |> Enum.flat_map(fn manager ->
+        case MatchManager.get_status(manager) do
+          {:ok, status} ->
+            [{Enum.count(status["players"]), MatchManager.server_name(manager), Messages.fetched_server_status_embed(manager, status)}]
+
+          {:error, err} ->
+            Logger.error("Error fetching server status: #{inspect(err)}")
+            [{0, MatchManager.server_name(manager), Messages.fetched_server_status_failure_embed(manager)}]
+        end
+      end)
+      |> Enum.sort_by(fn {player_count, name, _} -> {player_count, name} end)
+      |> Enum.map(fn {_, _, embed} -> embed end)
+      |> Enum.reverse()
+
+      if state.status_message_id do
+        update_server_status(status_thread_id, state.status_message_id, Messages.with_embeds(embeds))
+        state
+      else
+        message_id = send_server_status(status_thread_id, Messages.with_embeds(embeds))
+        %{state | status_message_id: message_id}
+      end
+    else
+      state
+    end
+
+    Process.send_after(self(), :update_status, @update_status_interval)
 
     {:ok, state}
   end
@@ -640,11 +671,22 @@ defmodule ChatBot.Bot do
     {:ok, state}
   end
 
-  defp send_server_status(channel_id, message) do
-    {:ok, %{status: 200}} = Req.post("https://discord.com/api/v10/channels/#{channel_id}/messages", [
+  defp update_server_status(channel_id, message_id, message) do
+    {:ok, %{status: 200}} = Req.patch("https://discord.com/api/v10/channels/#{channel_id}/messages/#{message_id}", [
       headers: http_auth_headers(),
       json: message
     ])
+
+    message_id
+  end
+
+  defp send_server_status(channel_id, message) do
+    {:ok, %{status: 200, body: %{"id" => message_id}}} = Req.post("https://discord.com/api/v10/channels/#{channel_id}/messages", [
+      headers: http_auth_headers(),
+      json: message
+    ])
+
+    message_id
   end
 
   defp respond_to_interaction(interaction, response) do
